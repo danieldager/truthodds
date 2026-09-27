@@ -9,7 +9,7 @@ Most claims people share online are never checked, and professional fact-checker
 
 ## How it works
 
-<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/figures/pipeline-dark.svg"><img src="docs/figures/pipeline.svg" width="860" alt="Pipeline: Extract (claims + queries), Search (top 10 pages, own source excluded), Read (one of seven flags per page), Weigh (fitted log-likelihood weights), Decide (log-odds vs boundary)"></picture></p>
+<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/figures/pipeline-dark.svg"><img src="docs/figures/pipeline.svg" width="100%" alt="Pipeline: Extract (claims + queries), Search (top 10 pages, own source excluded), Read (one of seven flags per page), Weigh (fitted log-likelihood weights), Decide (log-odds vs boundary)"></picture></p>
 
 1. **Extract.** A language model pulls the checkable claims out of a post and writes one web search query per claim.
 2. **Search.** The top ten results come back, with the claim's own source excluded so a post cannot vouch for itself.
@@ -17,7 +17,7 @@ Most claims people share online are never checked, and professional fact-checker
 4. **Weigh.** Each flag carries a weight fitted on professional fact-checks: how much more likely that flag is under a true claim than a false one. The weights simply add up.
 5. **Decide.** The sum is a log-odds score. Below a boundary set for a 2% false-positive rate, the post gets a nudge before it is shared.
 
-<p align="center"><img src="docs/figures/weights.png" width="640" alt="Fitted weight for each of the seven flags, with confidence intervals"></p>
+<p align="center"><img src="docs/figures/weights.png" width="720" alt="Fitted weight for each of the seven flags, with confidence intervals"></p>
 <p align="center"><sub>The whole model is these seven numbers. A page that contradicts a claim pulls the score down; a page that states it as fact pushes it up. Nothing is hidden inside a network.</sub></p>
 
 ## One claim, end to end
@@ -55,19 +55,17 @@ Every score comes with this table. When the system is wrong, you can see which p
 
 On AVeriTeC, a benchmark the weights never saw, the same seven weights reach an AUC of 0.869.
 
-<p align="center"><img src="docs/figures/averitec_auc.png" width="560" alt="AUC on the AVeriTeC benchmark"></p>
-
 ## The cheapest reader is as good as the best
 
-<p align="center"><img src="docs/figures/ladder_auc.png" width="440"> <img src="docs/figures/ladder_price.png" width="440"></p>
+<p align="center"><img src="docs/figures/readers.png" width="720" alt="AUC and cost per 1,000 page reads for three reader models on the same 500 claims"></p>
 
-Swapping the small reader for models ten times larger changes nothing: on the same 500 claims, DeepSeek Flash reaches 0.858, DeepSeek Pro 0.851, Kimi K2.6 0.848. What changes is the bill: about $0.12 per thousand pages read against $1.55. Scoring 1,660 claims, more than 16,000 page reads, cost about $2.
+Swapping the small reader for models ten times larger changes nothing: on the same 500 claims, DeepSeek Flash reaches 0.866, DeepSeek Pro 0.851, Kimi K2.6 0.848. What changes is the bill: about $0.14 per thousand pages read against $1.98 and $12.47. Scoring 1,660 claims, more than 16,000 page reads, cost about $2.
 
 ## Where it fails, and why that matters
 
-<p align="center"><img src="docs/figures/missdecomp.png" width="640" alt="Why false claims are missed"></p>
+<p align="center"><img src="docs/figures/missdecomp.png" width="720" alt="Why false claims are missed"></p>
 
-When a false claim slips through, it is rarely because the reader misjudged a page. In 44% of false claims, no page anywhere in the top results refutes them; nobody has written the correction yet. Three quarters of misses trace back to retrieval. The ceiling is set by the web, not by the model, which is also why a bigger model does not help.
+When a false claim slips through, it is rarely because the reader misjudged a page. In 44% of false claims, no page anywhere in the top results refutes them; nobody has written the correction yet. Three quarters of misses trace back to retrieval. Much of the ceiling is set by what has been written online rather than by the reader, which fits the finding that a bigger model does not help.
 
 ## Scope and ethics
 
@@ -79,7 +77,6 @@ When a false claim slips through, it is rarely because the reader misjudged a pa
 ## Read the code
 
 - [Code walkthrough](https://danieldager.github.io/truthodds/code_walkthrough.html), a guided tour of the pipeline, stage by stage.
-- [Final instrument report](https://danieldager.github.io/truthodds/final_instrument.html), the frozen evaluation behind the numbers above.
 - `src/` holds the pipeline; `capture/` holds a browser extension that collects posts for study.
 
 ## Status
