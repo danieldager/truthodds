@@ -2,7 +2,7 @@
 <p align="center"><b>A calibrated, interpretable, near-free fact-checker for social posts.</b></p>
 <p align="center"><a href="src/pyproject.toml"><img src="https://img.shields.io/badge/python-3.11%2B-3776AB" alt="Python 3.11+"></a> <a href="LICENSE"><img src="https://img.shields.io/badge/licence-MIT-2ea44f" alt="Licence: MIT"></a> <img src="https://img.shields.io/badge/status-research%20snapshot-8c959f" alt="Status: research snapshot"></p>
 
-Most claims people share online are never checked, and professional fact-checkers reach a tiny fraction of them. TruthOdds asks whether a cheap language model, pointed at the open web, can produce a trustworthy estimate of a claim's odds of being true, fast enough and cheaply enough to run on every post before it is shared. It extracts a post's claims, searches for each one, has a small model read the top results and flag each page (states the claim, supports it, contradicts it, and so on), then combines the flags with weights fitted on 3,000 claims drawn from 83,000 professional fact-checks into a single log-odds score. The result is a number you can read, a per-page account of where it came from, and a decision boundary set for a 2% false-positive rate. It was built at Sciences Po as the instrument behind a study of how warnings change what people share.
+Most claims shared online are never checked; professional fact-checkers reach a small fraction of them. TruthOdds asks whether a small language model with access to the open web can produce a calibrated estimate of the odds that a claim is true, at a cost low enough to run on every post before it is shared. It extracts a post's claims, searches for each one, has a small model read the top results and flag each page (states the claim, supports it, contradicts it, and so on), then combines the flags with weights fitted on 3,000 claims drawn from 83,000 professional fact-checks into a single log-odds score. The output is a single score, a per-page account of how it was reached, and a decision boundary set for a 2% false-positive rate. It was built at Sciences Po as the instrument behind a study of how warnings change what people share.
 
 <p align="center"><img src="docs/figures/roc.png" width="720" alt="ROC curves: AUC 0.857 with evidence dated before the fact-check, 0.924 with today's web"></p>
 <p align="center"><sub>Telling true claims from false ones on 3,000 professionally fact-checked claims. The stricter curve only lets the reader see pages published before the fact-check existed; the other lets it see today's web.</sub></p>
@@ -14,11 +14,11 @@ Most claims people share online are never checked, and professional fact-checker
 1. **Extract.** A language model pulls the checkable claims out of a post and writes one web search query per claim.
 2. **Search.** The top ten results come back, with the claim's own source excluded so a post cannot vouch for itself.
 3. **Read.** A small, cheap model reads each page and assigns one of seven flags, from *states the claim as fact* to *contradicts the claim*.
-4. **Weigh.** Each flag carries a weight fitted on professional fact-checks: how much more likely that flag is under a true claim than a false one. The weights simply add up.
+4. **Weigh.** Each flag carries a weight fitted on professional fact-checks: how much more likely that flag is under a true claim than a false one. The weights are summed.
 5. **Decide.** The sum is a log-odds score. Below a boundary set for a 2% false-positive rate, the post gets a nudge before it is shared.
 
 <p align="center"><img src="docs/figures/weights.png" width="720" alt="Fitted weight for each of the seven flags, with confidence intervals"></p>
-<p align="center"><sub>The whole model is these seven numbers. A page that contradicts a claim pulls the score down; a page that states it as fact pushes it up. Nothing is hidden inside a network.</sub></p>
+<p align="center"><sub>The model consists of these seven weights. A page that contradicts a claim lowers the score; a page that states it as fact raises it.</sub></p>
 
 ## One claim, end to end
 
@@ -46,26 +46,26 @@ The score of −10.17 is below the boundary of −4.01, so the post gets a nudge
 
 For contrast, a true Snopes claim from 2024, "Kiribati is the only country in the world to touch all four hemispheres", finds eight pages that state it, one that points toward it and one irrelevant page, and scores +24.39. It passes.
 
-Every score comes with this table. When the system is wrong, you can see which page misled it.
+Every score is accompanied by this table. When the system is wrong, the page responsible can be identified.
 
-## Does it hold up
+## Evaluation
 
 <p align="center"><img src="docs/figures/score_by_veracity.png" width="720" alt="Distribution of scores by fact-checker verdict, from false to true"></p>
 <p align="center"><sub>Scores by the fact-checker's verdict. The dashed line is the nudge boundary.</sub></p>
 
 On AVeriTeC, a benchmark the weights never saw, the same seven weights reach an AUC of 0.869.
 
-## The cheapest reader is as good as the best
+## Reader model comparison
 
 <p align="center"><img src="docs/figures/readers.png" width="720" alt="AUC and cost per 1,000 page reads for three reader models on the same 500 claims"></p>
 
-Swapping the small reader for far larger models changes nothing: on the same 500 claims, DeepSeek Flash reaches 0.866, DeepSeek Pro 0.851, Kimi K2.6 0.848. What changes is the bill: about $0.14 per thousand pages read against $1.98 and $12.47. Scoring 1,660 claims, more than 16,000 page reads, cost about $2.
+Replacing the small reader with much larger models does not improve discrimination: on the same 500 claims, DeepSeek Flash reaches 0.866, DeepSeek Pro 0.851, Kimi K2.6 0.848. What changes is the cost: about $0.14 per thousand pages read against $1.98 and $12.47. Scoring 1,660 claims, more than 16,000 page reads, cost about $2.
 
-## Where it fails, and why that matters
+## Where it fails
 
 <p align="center"><img src="docs/figures/missdecomp.png" width="720" alt="Why false claims are missed"></p>
 
-When a false claim slips through, it is rarely because the reader misjudged a page. In 44% of false claims, no page anywhere in the top results refutes them; nobody has written the correction yet. Three quarters of misses trace back to retrieval. Much of the ceiling is set by what has been written online rather than by the reader, which fits the finding that a bigger model does not help.
+When a false claim is missed, the cause is rarely a misread page. In 44% of false claims, no page anywhere in the top results refutes them. Three quarters of misses trace back to retrieval. Much of the ceiling is set by what has been written online rather than by the reader, which fits the finding that a bigger model does not help.
 
 ## Scope and ethics
 
