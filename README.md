@@ -59,7 +59,7 @@ On AVeriTeC, a benchmark the weights never saw, the same seven weights reach an 
 
 <p align="center"><img src="docs/figures/readers.png" width="720" alt="AUC and cost per 1,000 page reads for three reader models on the same 500 claims"></p>
 
-Swapping the small reader for models ten times larger changes nothing: on the same 500 claims, DeepSeek Flash reaches 0.866, DeepSeek Pro 0.851, Kimi K2.6 0.848. What changes is the bill: about $0.14 per thousand pages read against $1.98 and $12.47. Scoring 1,660 claims, more than 16,000 page reads, cost about $2.
+Swapping the small reader for far larger models changes nothing: on the same 500 claims, DeepSeek Flash reaches 0.866, DeepSeek Pro 0.851, Kimi K2.6 0.848. What changes is the bill: about $0.14 per thousand pages read against $1.98 and $12.47. Scoring 1,660 claims, more than 16,000 page reads, cost about $2.
 
 ## Where it fails, and why that matters
 
