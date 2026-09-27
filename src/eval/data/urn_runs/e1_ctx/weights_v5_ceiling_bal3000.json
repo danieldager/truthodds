@@ -1,0 +1,55 @@
+{
+ "name": "read-v5 SEVEN-flag graded urn \u2014 bal3000 ceiling refit",
+ "date": "2026-09-16",
+ "slice": "eval/data/populations/fc_gold_bal3000.parquet",
+ "reader": "read-v5 @ deepseek-ai/DeepSeek-V4-Flash (ceiling reads)",
+ "reads": "eval/data/urn_runs/e1_ctx/results-00.jsonl",
+ "read_hash": "92404a300e14",
+ "flags": [
+  "5",
+  "4",
+  "3",
+  "X",
+  "I",
+  "2",
+  "1"
+ ],
+ "weights": {
+  "5": 2.9021826255604424,
+  "4": 1.3629323720579885,
+  "3": -0.6931815737036756,
+  "X": 0.28924941664528264,
+  "I": -0.18739017138309824,
+  "2": -0.7388948123686282,
+  "1": -2.4642482971670145
+ },
+ "threshold": -4.011463855527319,
+ "threshold_rule": "nested: mean of the five per-fold thresholds at FPR<=2%",
+ "thresholds_by_fold": [
+  -3.951579212760561,
+  -3.763705307015768,
+  -4.145121706907969,
+  -3.9985662263156057,
+  -4.198346824636695
+ ],
+ "n": 3000,
+ "n_true": 1500,
+ "n_false": 1500,
+ "auc_oof": 0.8569157777777778,
+ "auc_ci95": [
+  0.8437894083899286,
+  0.8678614908441181
+ ],
+ "recall_at_2pct_fpr": 0.4166666666666667,
+ "fpr": 0.023333333333333334,
+ "pad_to": 10,
+ "folds": 5,
+ "fold_key": "cluster_id",
+ "smoothing": "+1 per flag / +7 on totals",
+ "silence_rule": {
+  "recall_at_2pct_fpr": 0.4166666666666667,
+  "auc_oof_silent_as_pass": 0.6963337777777778,
+  "n_silent_true": 333,
+  "n_silent_false": 431
+ }
+}

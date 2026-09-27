@@ -1,0 +1,481 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fact-Checking Pipeline — flow</title>
+<style>
+  :root{
+    --ink:#1a1a1a; --mut:#6f6f6f; --line:#d6d6d6; --bg:#fbfbfb; --code:#f4f4f4;
+    --sel:#ececec; --mono:'SF Mono',ui-monospace,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:15px/1.55 -apple-system,'Helvetica Neue',Arial,sans-serif}
+  header{padding:22px 28px 12px}
+  h1{font-size:19px;margin:0;font-weight:600}
+  .sub{color:var(--mut);font-size:13px;margin-top:3px;max-width:760px}
+  .ex{margin:12px 28px 0;padding:9px 13px;border:1px solid var(--line);border-radius:6px;background:#fff;font-size:13.5px}
+  .ex b{font-weight:600}
+  .ex .v{font-family:var(--mono);font-size:12px;border:1px solid var(--ink);border-radius:3px;padding:0 5px}
+  .ex .m{color:var(--mut);font-family:var(--mono);font-size:11.5px}
+
+  /* ---- flow diagram (left → right) ---- */
+  .diagram{display:flex;flex-flow:row wrap;justify-content:center;align-items:stretch;
+    margin:18px 0 2px;padding:0 22px}
+  .node{flex:0 0 150px;max-width:150px;display:flex;flex-direction:column;
+    border:1px solid var(--line);background:#fff;border-radius:8px;padding:9px 11px;
+    cursor:pointer;transition:.08s;overflow:hidden}
+  .node:hover{border-color:var(--ink)}
+  .node.cur{border-color:var(--ink);box-shadow:0 0 0 2px var(--ink)}
+  .node.io{flex-basis:116px;max-width:116px;cursor:default;background:#f3f3f3;border-style:dashed;
+    justify-content:center;text-align:center;color:var(--mut);font-size:12.5px}
+  .node .nm{font-weight:600;font-size:13.5px;line-height:1.22;overflow-wrap:break-word}
+  .node .ds{color:var(--mut);font-size:11px;line-height:1.3;margin-top:3px;overflow-wrap:break-word}
+  .node .foot{margin-top:auto;padding-top:7px;display:flex;flex-direction:column;gap:3px;align-items:flex-start}
+  .node .tag{font:9.5px var(--mono);color:var(--mut)}
+  .node .st{font:9px var(--mono);text-transform:uppercase;letter-spacing:.3px;color:var(--mut);
+    border:1px solid var(--line);border-radius:3px;padding:0 4px}
+  .conn{flex:0 0 20px;align-self:center;height:1px;background:var(--ink);position:relative}
+  .conn:after{content:'▶';position:absolute;right:-2px;top:-6px;font-size:9px;color:var(--ink)}
+  .casc{font:11px var(--mono);color:var(--mut);text-align:center;margin:8px auto 0;max-width:880px;padding:0 22px}
+
+  /* ---- detail (adaptive) ---- */
+  .detail{margin:14px 28px 44px;border:1px solid var(--line);border-radius:8px;background:#fff;overflow:hidden;min-height:300px}
+  .detail.split{display:grid;grid-template-columns:minmax(170px,220px) 1fr}
+  .stepcol{border-right:1px solid var(--line);padding:6px;background:#fcfcfc}
+  .stepcol .ch{font:10px var(--mono);text-transform:uppercase;letter-spacing:.5px;color:var(--mut);padding:8px 10px 4px}
+  .stp{padding:8px 11px;border-radius:6px;cursor:pointer;border:1px solid transparent}
+  .stp:hover{background:var(--sel)}
+  .stp.cur{background:var(--sel);border-color:var(--line)}
+  .stp .t{display:flex;gap:7px;align-items:baseline}
+  .stp .n{font:11px var(--mono);color:var(--mut)}
+  .stp .nm{font-weight:600;font-size:13.5px}
+  .stp .llm{font:9px var(--mono);border:1px solid var(--line);border-radius:3px;padding:0 3px;color:var(--mut)}
+  .body{padding:20px 24px}
+  .body h2{font-size:17px;margin:0}
+  .body .pref{font:11px var(--mono);color:var(--mut);margin-top:2px}
+  .body .lead{margin:11px 0 15px;font-size:14px;max-width:none}
+  .sec{margin:0 0 15px;max-width:none}
+  .cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:2px 28px;align-items:start}
+  .col{min-width:0}
+  .sec>.h{font:11px var(--mono);letter-spacing:.6px;text-transform:uppercase;color:var(--mut);margin-bottom:6px}
+  .why{border-left:3px solid var(--line);padding:2px 0 2px 13px;color:#333;font-size:14px}
+  .io2{border:1px solid var(--line);border-radius:6px;overflow:hidden}
+  .io2 .r{display:grid;grid-template-columns:86px 1fr;border-top:1px solid var(--line)}
+  .io2 .r:first-child{border-top:none}
+  .io2 .k{background:#fafafa;padding:8px 10px;font:11px var(--mono);color:var(--mut);border-right:1px solid var(--line);overflow-wrap:anywhere}
+  .io2 .v{padding:8px 11px;font-size:13.5px;min-width:0;overflow-wrap:break-word}
+  .io2 code{font:12px var(--mono);background:var(--code);padding:1px 4px;border-radius:3px;overflow-wrap:anywhere}
+  .docs{display:grid;grid-template-columns:repeat(auto-fit,minmax(195px,1fr));gap:6px}
+  .docs .doc{margin:0}
+  /* ---- verification-loop overview diagram ---- */
+  .stp.ov{margin-bottom:6px}
+  .stp.ov .n{font-size:12px}
+  .loopdiagram{display:flex;flex-direction:column;align-items:center;margin:10px 0 6px}
+  .lstep{border:1px solid var(--line);border-radius:6px;background:#fff;padding:5px 9px;
+    font-size:12.5px;cursor:pointer;white-space:nowrap;transition:.08s}
+  .lstep:hover{border-color:var(--ink)}
+  .lstep .ln{font:10px var(--mono);color:var(--mut);margin-right:5px}
+  .lstep.entry,.lstep.exit{background:#f3f3f3}
+  .lconn{font:11px var(--mono);color:var(--mut);text-align:center;margin:5px 0}
+  .lconn b{color:var(--ink)}
+  .lround{align-self:stretch;border:1px solid var(--line);border-radius:8px;
+    padding:15px 14px 12px;position:relative;background:#fcfcfc}
+  .lround-lbl{position:absolute;top:-8px;left:16px;background:#fff;padding:0 6px;
+    font:9.5px var(--mono);color:var(--mut);text-transform:uppercase;letter-spacing:.4px}
+  .lrow{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:7px}
+  .lrow .ar{color:var(--mut)}
+  .lback{margin-top:12px;text-align:center;font-size:12px;color:var(--mut)}
+  .lback .lstep{display:inline-block;vertical-align:middle;margin:0 3px}
+  .ovp{font-size:14px;line-height:1.6;margin:0;max-width:780px}
+  details{border:1px solid var(--line);border-radius:6px;margin:6px 0;background:#fff}
+  summary{cursor:pointer;padding:8px 11px;font:12px var(--mono);list-style:none}
+  summary::-webkit-details-marker{display:none}
+  summary:before{content:'▸ ';color:var(--mut)} details[open]>summary:before{content:'▾ '}
+  pre{margin:0;padding:11px 13px;border-top:1px solid var(--line);background:var(--code);
+    font:12px/1.5 var(--mono);white-space:pre-wrap;overflow-x:auto}
+  .doc{border:1px solid var(--line);border-radius:5px;padding:7px 9px;margin:5px 0;font-size:12.5px}
+  .doc .u{font:11px var(--mono);color:var(--mut);word-break:break-all}
+  .doc .kept{font:9px var(--mono);border:1px solid var(--line);border-radius:3px;padding:0 4px;margin-left:6px}
+  .note{color:var(--mut);font-size:12.5px;font-style:italic}
+  footer{margin:0 28px 38px;color:var(--mut);font-size:12px;border-top:1px solid var(--line);padding-top:12px}
+  footer code{font:11px var(--mono);background:var(--code);padding:1px 4px;border-radius:3px}
+  .legend span{font:10px var(--mono);margin-right:14px;text-transform:uppercase;color:var(--mut)}
+</style>
+</head>
+<body>
+<header>
+  <h1>Fact-Checking Pipeline — the flow</h1>
+  <div class="sub">How a post becomes a verdict. Each claim is escalated through cheaper checks first; only novel claims reach the full verification loop. Click a component below for what it does, why, and its prompt. (Status tags show what is wired vs. still stubbed — this doc is about the flow, not performance.)</div>
+</header>
+
+<div class="ex">
+  Worked example — claim: <b id="exC"></b> &nbsp; → pipeline verdict <span class="v" id="exV"></span>
+  <span class="m" id="exM"></span>
+</div>
+
+<div class="diagram" id="diagram"></div>
+<div class="detail" id="detail"></div>
+
+<footer>
+  <span class="legend"><span>■ built</span><span>◧ partial</span><span>◔ stub</span></span>
+  <p style="margin-top:9px">Source of truth: <code>src/pipeline/</code> (<code>verify.py</code>, <code>verify_prompts.py</code>, <code>cache.py</code>, <code>fact_api.py</code>, <code>extract.py</code>) + <code>eval/harmonize.py</code>. The verification loop is the only component live end-to-end today; the cache and fact-check API are written/partly-written, claim extraction's production entrypoint is being finalised. Prompts shown verbatim.</p>
+</footer>
+
+<script>
+const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+const EX={
+ claim:'Portugal decriminalized the personal possession of all drugs in 2001.',
+ verdict:'Supported',
+ model:'· real run · trace model deepseek-ai/DeepSeek-V4-Flash (DeepInfra) — the current production model',
+ r1q:'Portugal decriminalized personal possession of all drugs 2001',
+ r1docs:[
+  {u:'obamawhitehouse.archives.gov/ondcp/...',k:'scraped',s:'US ONDCP fact sheet: in July 2001 Portugal decriminalized personal use and possession of all illicit drugs under Law 30/2000; up to a ten-day supply is referred to an administrative panel, while trafficking stays criminal.'},
+  {u:'link.springer.com/.../s13011-021-00394-7',k:'scraped',s:'Peer-reviewed article: Law 30/2000 (in force 2001) made use, acquisition and possession of all drugs an administrative misdemeanour handled by the Dissuasion Commissions, not a crime.'},
+  {u:'transformdrugs.org/blog/...',k:'scraped',s:'Transform Drug Policy: in 2001 personal possession of all drugs became an administrative offence — no imprisonment, no criminal record — though drugs are still confiscated and fines can apply.'},
+  {u:'en.wikipedia.org/wiki/Drug_policy_of_Portugal',k:'scraped',s:'Law 30/2000, effective July 2001, decriminalized public and private use and possession of all drugs; possession remains illegal but is handled administratively, not criminally.'},
+  {u:'politico.com/news/2024/...portugal',k:'snippet',s:'Decriminalization took effect in the summer of 2001; a policy architect says it moved drug users into treatment.'},
+ ],
+ r1a:'All five sources confirm Portugal decriminalized personal possession of all drugs via Law 30/2000, in effect July 2001. The nuance is consistent across them: possession for personal use (up to a ten-day supply) became an administrative offence — a fine or treatment referral, no criminal record — while trafficking and larger quantities stay criminal. The sources are reliable (US ONDCP fact sheet, a peer-reviewed article, Transform, Wikipedia) and unanimous, so the evidence is sufficient.',
+ r1n:null,
+ likert:{veracity:5,evidence_sufficiency:5,evidence_agreement:5,source_reliability:5},
+};
+
+/* loop sub-steps */
+const STEPS=[
+ {n:1,name:'Plan a query',ref:'src/pipeline/verify.py · verify_prompts.py',llm:1,
+  one:'One LLM call turns the claim into a single web search query.',
+  io:{in:'claim',out:'{"query": "Portugal decriminalized personal possession of all drugs 2001"}'},
+  prompt:{name:'PLAN_SYSTEM',sys:`You are a fact-checker. The available knowledge is insufficient to assess the Claim, so you must retrieve evidence from the web. Produce ONE web search query that would best surface evidence that could confirm or refute the Claim.
+
+- Use the specific named entities, dates, numbers, and exact phrases from the Claim.
+- Prefer the terms a journalist or institution would use, not informal phrasing.
+- Plain text only — no search operators (site:, quotes, AND/OR).
+
+Output strictly valid JSON and nothing else: {"query": "<the search query>"}`,usr:`Claim: {claim_text}
+
+Produce the opening search query.`}},
+ {n:2,name:'Search & rerank',ref:'src/pipeline/verify.py · search.py · credibility.py',llm:0,
+  one:'Run the query through web search — a keyword engine first, then a meaning-based one (Exa) if more is needed. Social media is filtered out, more trustworthy sources are preferred, and the top 5 are kept. A failed search is recorded as an error, never read as "no evidence".',
+  io:{in:'query',out:'5 kept (from ≤10 retrieved): ONDCP · Springer · Transform · Wikipedia · Politico'},
+  how:'How the rerank works: each source gets a trust level from its domain — high (governments, universities, fact-checkers, major news and journals), normal, or excluded (social media). Excluded sources are dropped; the rest are ordered so the most trustworthy come first, using the search engine ranking to break ties. The top 5 move on. It is just a fixed list of domains — no LLM and no extra lookups.'},
+ {n:3,name:'Read + summarise evidence',ref:'src/pipeline/verify.py · verify_prompts.py',llm:1,
+  one:'Open each kept page and have the LLM write a short, claim-focused summary with any key quotes. If a page cannot be opened, its search snippet is kept as-is.',
+  io:{in:'5 URLs',out:'per-doc {relevant, summary, quotes}'},
+  prompt:{name:'SUMMARISE_SYSTEM',sys:`You just ran a web search to find evidence for a fact-check. Summarize the Search Result concisely, including ONLY information relevant to the Claim.
+
+Include:
+- Information useful for fact-checking the Claim.
+- If available, the publication date, and the author or publisher.
+- Direct quotes from the Search Result that bear on the Claim.
+
+Do NOT include advertisements or anything unrelated to the Claim. Do NOT add information not present in the Search Result; do not use outside knowledge. Do not take a position on whether the Claim is true — only state what the Search Result says.
+
+If the Search Result contains no information relevant to the Claim, set relevant=false.
+
+Output strictly valid JSON and nothing else:
+{"relevant": <true|false>, "publication_date": "YYYY-MM-DD" or null, "summary": "<at most 5 sentences, Claim-relevant content only>", "quotes": ["<verbatim quote bearing on the Claim>", ...]}`,usr:`Claim: {claim_text}
+
+Search Result:
+{url}
+{content[:12000]}`}},
+ {n:4,name:'Synthesise — analysis + next query',ref:'src/pipeline/verify.py · verify_prompts.py',llm:1,
+  one:'The LLM weighs all the evidence so far into one analysis and decides: is this enough? If yes, stop; if not, propose one new search aimed at the gap (without repeating an earlier one).',
+  io:{in:'evidence pool + past queries',out:'{analysis, next_query} — one round here: the analysis was confident, so next_query = null'},
+  prompt:{name:'SYNTHESISE_SYSTEM',sys:`You have gathered Evidence about a Claim through one or more rounds of web search. Analyze the Claim's veracity using ONLY the recorded Evidence.
+
+- Focus on new insights; do not restate the Claim or repeat the Evidence verbatim.
+- One to three paragraphs — the fewer, the better.
+- Note agreements, contradictions, gaps, and the reliability of the sources.
+- If there is insufficient information to verify the Claim, explicitly state what specific information is missing.
+- You may use commonsense knowledge, but do not introduce facts not implied by the Evidence.
+
+Then decide: is the Evidence sufficient to assess the Claim, or is a specific sub-question still unresolved AND likely answerable by one more targeted search? Request another search only if it is genuinely necessary.
+
+Output strictly valid JSON and nothing else:
+{"analysis": "<your 1-3 paragraph analysis>", "next_query": "<a NEW search query targeting the missing information, or null if the evidence is sufficient>"}
+
+The next_query, if any, must target a specific gap and must NOT repeat or paraphrase a previous query.`,usr:`Claim: {claim_text}
+
+Evidence:
+{evidence_block}
+
+Previous queries (do not repeat):
+{past_queries}
+
+Analyze the Claim and decide whether to search again.`,
+  extra:[{t:'_NUDGE — appended when the proposed query is too similar to a past one',x:`NOTE: your previous proposed query was too similar to one already tried — it would return the same results. Propose a SUBSTANTIVELY different angle (different entities, a different aspect of the claim, a different timeframe, or a different source type), OR set next_query to null if you have genuinely exhausted useful angles.`},
+   {t:'_ESCALATE_EXA — appended when the next search runs on Exa (neural)',x:`NOTE: your next search will run on a DIFFERENT engine — Exa, which searches by meaning (neural/semantic) rather than keywords. It can surface harder-to-find, less mainstream, or more specific sources that the keyword engine missed, and it rewards a precise, descriptive query. Because this is a different engine, the 'do not repeat' rule above is relaxed: you may reuse one of the previous queries, combine them, refine one to be more precise, or write a completely new query.`}]}},
+ {n:5,name:'Loop or stop',ref:'src/pipeline/verify.py · config.py',llm:0,
+  one:'If the analysis is confident, stop. Otherwise search again with the new query — switching to the meaning-based engine once the first is used up. It never runs more than 4 rounds.',
+  io:{in:'next_query',out:'next_query null after round 1 → STOP (confident)'}},
+ {n:6,name:'Redundancy check',ref:'src/pipeline/verify.py · config.py',llm:0,
+  one:'Before searching again, make sure the new query is not just a reworded earlier one. If it is too similar, ask the LLM for a genuinely different angle. This keeps the loop from going in circles.',
+  io:{in:'candidate vs past queries',out:'not exercised this run — the loop stopped after one round, so no follow-up query reached the gate'}},
+ {n:7,name:'Produce the verdict',ref:'src/pipeline/verify.py · verify_prompts.py',llm:1,
+  one:'From the final analysis alone, two judges run: one gives the four-way verdict (Supported / Refuted / Conflicting / Not Enough Evidence), the other rates confidence on four 1–5 scales.',
+  io:{in:'final analysis',out:'Likert {veracity 5, suff 5, agree 5, src 5} · 4-class: Supported'},
+  prompt:{name:'LIKERT_SYSTEM + FOURCLASS_SYSTEM',sys:`[ LIKERT_SYSTEM — ours: a verdict score + 3 confidence scores, each 1-5 ]
+You are assessing a claim from a synthesized analysis of evidence — the analysis is your ONLY context; add no outside knowledge. Output one veracity score (which way the evidence points) and three confidence scores (how much to trust that read).
+
+veracity 1-5  (5 clearly true … 1 clearly false)
+evidence_sufficiency 1-5  (how directly/fully the evidence addresses the claim)
+evidence_agreement 1-5  (do the pieces point the same way; 3 = only one piece)
+source_reliability 1-5  (5 primary/authoritative … 1 fringe/anonymous)
+
+Output strict JSON: {veracity, evidence_sufficiency, evidence_agreement, source_reliability, justification}
+
+[ FOURCLASS_SYSTEM — ClaimCheck's judge prompt, verbatim ]
+Determine the Claim's veracity from the synthesized analysis:
+1. Briefly summarize the key insights in at most one paragraph.
+2. Write one paragraph on which Decision Option applies best, and emit it at the end.
+
+Decision Options: Supported | Refuted | Conflicting Evidence/Cherrypicking | Not Enough Evidence
+
+Rules:
+Supported — directly and clearly backed by strong, credible evidence.
+Refuted — contradicted by strong evidence, or shown fabricated/false in its main point. Lack of any credible supporting source means Refuted, NOT "Not Enough Evidence".
+Conflicting Evidence/Cherrypicking — only if reputable sources irreconcilably contradict each other on the main point.
+Not Enough Evidence — last resort: genuinely no relevant evidence AND the claim too vague to evaluate.
+
+Output JSON: {verdict, justification}`,usr:`Claim: {claim_text}
+
+Synthesized analysis:
+{analysis}
+
+Assign the scores / the decision option.`}},
+];
+
+const COMPONENTS=[
+ {id:'extract',name:'Claim extraction',ds:'post → atomic claims',status:'stub',glyph:'◔',simple:true,
+  path:'src/pipeline/extract.py',
+  lead:'One LLM call breaks the post into atomic claims — each a single statement that can be checked on its own. Every claim is also turned into an embedding (a numeric fingerprint of its meaning). That claim-and-embedding pair is what every later step works on.',
+  why:'Splitting a post into separate claims lets each one be checked — and cached — on its own. What matters is only whether the post makes a factual assertion; tone, sarcasm, or opinion do not make something uncheckable. Claims are handled in both English and French.',
+  io:{in:'social-media post',out:'list of atomic claims {text, embedding}'},
+  status_note:'The production extract() is still a stub; a fuller multi-step extractor already runs in the research code, and the prompt shown here is the single-pass version it will adopt.',
+  prompt:{name:'_SYSTEM (decomposition)',sys:`You are a fact-checking assistant. Given a social media post, determine whether it contains verifiable factual claims.
+
+If it does, decompose the post into atomic claims — each a single, independently checkable statement.
+
+Rules for is_checkable:
+- TRUE whenever the post contains ANY factual assertion about the real world.
+- Tone and framing are irrelevant: accusatory, sarcastic, emotional, or rhetorical phrasing does NOT make a claim uncheckable.
+- Checkable: what someone said or did, historical events, statistics, scientific claims, allegations, accusations, conspiracy theories, medical/election claims.
+- FALSE ONLY when the entire post has ZERO factual content (pure preference, a question with no embedded assertion, a future prediction, or an emotional expression).
+
+Examples (checkable): "You are watching the cheaters sending in phony ballots" → asserts voter fraud → checkable. "The earth is flat" → false, but still a factual assertion → checkable.
+Examples (not): "I love this country!" → pure sentiment. "Will Biden ban fracking?" → pure question.
+
+Output strictly valid JSON: {"is_checkable": <bool>, "claims": ["<atomic claim>", ...]}`,usr:`Post:
+{text}`},
+  ex:{in:'[post] "People forget Portugal decriminalized personal possession of ALL drugs back in 2001 — and society did not collapse."',out:'1 atomic claim: "Portugal decriminalized the personal possession of all drugs in 2001." (the opinion clause is dropped — not independently checkable)'}},
+
+ {id:'cache',name:'Vector-DB cache',ds:'equivalent claim cached?',status:'partial',glyph:'◧',simple:true,
+  path:'src/pipeline/cache.py',
+  lead:'Look the claim up against ones already checked: first find close matches by meaning, then an LLM confirms whether a match is really the SAME claim. On a confirmed, still-fresh hit, reuse that verdict and skip the expensive checking.',
+  why:'Claims that look almost identical can have opposite verdicts — a flipped word, a changed number or name, a narrower scope — so similarity alone is not safe; the LLM check is what makes reuse trustworthy. Caching means only the first person to share a claim waits for the full check, and everyone after gets the answer instantly.',
+  io:{in:'atomic claim',out:'cached verdict (HIT) — else nothing (MISS → fall through)'},
+  status_note:'The code is written and tested on its own, but not yet wired up end-to-end (it needs the live database and the extractor).',
+  prompt:{name:'_GATE_SYSTEM (equivalence gate)',sys:`You are a strict logical-equivalence judge for a fact-checking cache. Two claims are EQUIVALENT only if a SINGLE fact-check verdict would apply identically to BOTH — i.e. they mutually entail each other. ANY of these verdict-flipping differences makes them NOT equivalent: negation (opposite truth value); different numbers / quantities / dates; different named entities; different scope or quantifier (some vs all). Respond with ONLY JSON: {"a_entails_b": bool, "b_entails_a": bool, "relation": "equivalent"|"negation"|"related"|"unrelated"}`,usr:`CLAIM A: {a}
+CLAIM B: {b}`},
+  ex:{in:'the Portugal-drugs claim',out:'MISS — no equivalent claim cached → fall through'}},
+
+ {id:'fct',name:'Fact-check API',ds:'already fact-checked?',status:'stub',glyph:'◔',simple:true,
+  path:'src/pipeline/fact_api.py · eval/harmonize.py',
+  lead:'Ask the Google Fact Check API whether a trusted fact-checker has already rated this claim. If one has, translate their wording (e.g. "Mostly True") into our four-way verdict.',
+  why:'It is free and covers many claims people have already checked — far cheaper than running the loop. The verdict reflects what the evidence shows, not how the fact-checker phrased it: "no record of this" becomes Not Enough Evidence, "the video is AI-generated" becomes Refuted.',
+  io:{in:'atomic claim',out:'harmonised verdict (trusted HIT) — else nothing (MISS → fall through)'},
+  status_note:'The production lookup is still a stub; the API client and the wording-translator below are built and already used to assemble evaluation data.',
+  prompt:{name:'LLM_SYSTEM (rating harmoniser)',sys:`You are classifying fact-check verdicts into a 4-class scheme used by an academic fact-checking evaluation pipeline. The scheme follows AVeriTeC: the class depends on the EVIDENCE state, not on the fact-checker's rhetorical framing.
+
+The four classes are: "Supported" | "Refuted" | "Not Enough Evidence" | "Conflicting Evidence".
+
+- Supported: there is evidence that the claim is true. ('True.', 'Correct.', 'This did happen.')
+- Refuted: evidence that the claim is false, OR the claim is about an artifact (image/video/quote) that is fabricated, altered, AI-generated, miscaptioned, or misattributed. ('False, the policy was X.', 'The video is doctored.', 'This is AI-generated.')
+- Not Enough Evidence: the fact-checker searched and could NOT find evidence either way — whenever the main finding is the ABSENCE of evidence. ('No record of this.', 'Unproven.', 'Unsubstantiated.')  Key distinction: positive counter-evidence = Refuted; mere absence = Not Enough Evidence.
+- Conflicting Evidence: reputable sources directly and irreconcilably contradict each other.
+
+Output JSON: {"label": "<one of the four classes>"}`,usr:`Fact-checker verdict:
+{rating}`},
+  ex:{in:'the Portugal-drugs claim',out:'no trusted fact-check returned by the API → fall through'}},
+
+ {id:'loop',name:'Verification loop',ds:'retrieve & reason',status:'built',glyph:'■',simple:false,
+  path:'src/pipeline/verify.py · verify_prompts.py',
+  lead:'The expensive fallback for new claims, and the heart of the project: a loop that searches the web, reads what it finds, reasons over the evidence, and decides whether to search again — stopping once it is confident — then produces a verdict.',
+  why:'It closely follows the published ClaimCheck method (arXiv:2510.01226), with two small changes: every step returns structured JSON, and web search is the only tool. A single LLM does every step, including the final verdict.',
+  io:{in:'atomic claim',out:'verdict + analysis + 4-dim confidence'},
+  steps:STEPS},
+
+ {id:'flag',name:'Post-level flag',ds:'whole post misleading?',status:'built',glyph:'■',simple:true,
+  path:'src/pipeline/verify.py · verify_prompts.py',
+  lead:'After the claims are checked, one more cheap LLM call looks at the whole original post — using the claim and its evidence — and decides whether the post is framed to mislead, even when its facts are technically true.',
+  why:'A claim is given its verdict without the surrounding post, so the verdict can be cached and reused — but a true claim can still be used to mislead (implying a false cause, leaving out key context, passing an old event off as new, or putting it in the wrong mouth). Deciding whether to warn a user needs the framing of the whole post, not just whether the claim is true.',
+  io:{in:'raw post + claim + evidence analysis',out:'{flag, reason}'},
+  status_note:'Built, but only runs when a full post is supplied; the current evaluation calls the loop directly with no post, so this step is not exercised there yet.',
+  prompt:{name:'FLAG_SYSTEM',sys:`You decide whether a social-media POST should be flagged as potential misinformation, for a tool that warns users before they share misleading content.
+
+You are given the POST, an atomic CLAIM drawn from it, and an evidence-based ANALYSIS of that claim's veracity. Decide whether the POST should be flagged.
+
+Flag the post (flag=true) if a reader would be misled by it: the claim is false or unsupported, OR the claim is literally true but the POST frames it misleadingly — implying causation from mere sequence, omitting essential context, presenting a stale event as recent, or attributing it falsely. Pass the post (flag=false) only if it is accurate AND its framing is not misleading.
+
+Judge the POST as written, using the evidence — do not rely on the claim's literal wording alone, and do not flag merely because a minor detail is uncertain. Output strict JSON: {"flag": <true|false>, "reason": "<one sentence grounded in the evidence and the post's framing>"}`,usr:`POST:
+{post}
+
+ATOMIC CLAIM (extracted from the post):
+{claim_text}
+
+EVIDENCE ANALYSIS of the claim:
+{analysis}
+
+Should this POST be flagged?`},
+  ex:{in:'(no raw post in this trace)',out:'not run — illustrative target: a literally-true post framed to mislead would flag here even when the atomic verdict is Supported'}},
+];
+
+/* ---------- render ---------- */
+document.getElementById('exC').textContent=EX.claim;
+document.getElementById('exV').textContent=EX.verdict;
+document.getElementById('exM').textContent=EX.model;
+
+const dia=document.getElementById('diagram');
+function node(html,cls){const d=document.createElement('div');d.className='node'+(cls?' '+cls:'');d.innerHTML=html;return d;}
+function conn(){const c=document.createElement('div');c.className='conn';dia.appendChild(c);}
+dia.appendChild(node('Social-media post','io'));
+conn();
+addNode(COMPONENTS[0]); // extract
+conn();
+['cache','fct','loop'].forEach((id,i)=>{ if(i)conn(); addNode(COMPONENTS.find(c=>c.id===id), id==='cache'||id==='fct'); });
+conn();
+addNode(COMPONENTS.find(c=>c.id==='flag'));
+conn();
+dia.appendChild(node('nudge decision','io'));
+const casc=document.createElement('div');casc.className='casc';
+casc.textContent='cache · fact-check · loop run in escalating cost order — each claim resolves at the cheapest tier that can; a cache or fact-check hit short-circuits to a verdict.';
+dia.after(casc);
+
+function addNode(c,exit){
+ let foot='<div class="foot">';
+ if(!c.simple) foot+='<div class="tag">⊕ '+c.steps.length+' steps</div>';
+ else if(exit) foot+='<div class="tag">hit → verdict</div>';
+ foot+=`<span class="st">${c.glyph} ${c.status}</span></div>`;
+ const n=node(`<div class="nm">${esc(c.name)}</div><div class="ds">${esc(c.ds)}</div>${foot}`);
+ n.dataset.id=c.id; n.onclick=()=>show(c.id);
+ dia.appendChild(n);
+}
+
+function curNode(id){[...dia.querySelectorAll('.node')].forEach(n=>n.classList.toggle('cur',n.dataset.id===id));}
+const D=document.getElementById('detail');
+
+function promptHTML(p){
+ if(!p) return '';
+ let h=`<div class="sec"><div class="h">Prompt — ${esc(p.name)} (verbatim · click to expand)</div>
+   <details><summary>system</summary><pre>${esc(p.sys)}</pre></details>
+   <details><summary>user message</summary><pre>${esc(p.usr)}</pre></details>`;
+ (p.extra||[]).forEach(e=>h+=`<details><summary>${esc(e.t)}</summary><pre>${esc(e.x)}</pre></details>`);
+ return h+'</div>';
+}
+function ioHTML(io,label){return `<div class="sec"><div class="h">${label||'Input → output'}</div><div class="io2">
+  <div class="r"><div class="k">in</div><div class="v">${io.in}</div></div>
+  <div class="r"><div class="k">out</div><div class="v">${io.out.startsWith('{')||io.out.includes('"')?'<code>'+esc(io.out)+'</code>':esc(io.out)}</div></div></div></div>`;}
+
+function simplePanel(c){
+ let h=`<div class="body"><h2>${esc(c.name)}</h2><div class="pref">${c.glyph} ${c.status} · code ${esc(c.path)}</div>
+   <p class="lead">${esc(c.lead)}</p><div class="cols"><div class="col">
+   <div class="sec"><div class="h">Why</div><div class="why">${esc(c.why)}</div></div>`;
+ h+=ioHTML(c.io);
+ if(c.status_note) h+=`<div class="sec"><p class="note">${esc(c.status_note)}</p></div>`;
+ h+=`</div><div class="col">`;
+ h+=promptHTML(c.prompt);
+ h+=`<div class="sec"><div class="h">Worked example</div><div class="io2">
+   <div class="r"><div class="k">in</div><div class="v">${esc(c.ex.in)}</div></div>
+   <div class="r"><div class="k">out</div><div class="v">${esc(c.ex.out)}</div></div></div></div>`;
+ return h+'</div></div></div>';
+}
+
+const exRow=(k,v)=>`<div class="r"><div class="k">${k}</div><div class="v">${v}</div></div>`;
+const docList=(docs,withSummary)=>`<div class="docs">`+docs.map(d=>
+  `<div class="doc"><span class="u">${esc(d.u)}</span><span class="kept">${d.k}</span>${withSummary?`<div>${esc(d.s)}</div>`:''}</div>`).join('')+`</div>`;
+
+/* per-step slice of the SAME worked-example trace, so each step shows only what IT produced */
+function stepExample(s){
+ const n=s.n, head=t=>`<div class="sec"><div class="h">Worked example — ${esc(t)}</div><div class="io2">`, end=`</div></div>`;
+ if(n===1) return head('claim → query')+exRow('in',esc(EX.claim))+exRow('out',`<code>{"query": "${esc(EX.r1q)}"}</code>`)+end;
+ if(n===2) return head('query → kept evidence')+exRow('query',`<code>${esc(EX.r1q)}</code>`)+exRow('kept',docList(EX.r1docs,false))+end;
+ if(n===3) return head('per-doc summaries')+exRow('evidence',docList(EX.r1docs,true))+end;
+ if(n===4) return head('analysis + next query')+exRow('analysis',esc(EX.r1a))+exRow('next',`<code>null</code> → <b>confident, stop</b>`)+end;
+ if(n===5) return head('the stop decision')+exRow('next query',`<code>null</code>`)+exRow('decision',`<b>STOP — confident</b> (1 round used; hard cap 4)`)+end;
+ if(n===6) return head('redundancy gate')+exRow('this run',`the loop stopped after round 1, so no follow-up query reached the gate`)+end;
+ if(n===7) return head('verdict')
+   +exRow('Likert',`veracity <code>${EX.likert.veracity}</code> · sufficiency <code>${EX.likert.evidence_sufficiency}</code> · agreement <code>${EX.likert.evidence_agreement}</code> · source <code>${EX.likert.source_reliability}</code>`)
+   +exRow('verdict',`<b>${esc(EX.verdict)}</b> — unanimous, reliable sources (US ONDCP, peer-reviewed, Transform, Wikipedia) confirm Law 30/2000.`)+end;
+ return '';
+}
+
+function stepDetail(s){
+ let h=`<div class="body"><h2>${s.n}. ${esc(s.name)}</h2><div class="pref">${s.llm?'LLM':'no LLM'} · code ${esc(s.ref)}</div>
+   <p class="lead">${esc(s.one)}</p><div class="cols"><div class="col">`;
+ h+=ioHTML(s.io);
+ h+=promptHTML(s.prompt);
+ if(s.how) h+=`<div class="sec"><div class="why">${esc(s.how)}</div></div>`;
+ h+=`</div><div class="col">`;
+ h+=stepExample(s);
+ return h+'</div></div></div>';
+}
+
+const loopChip=(n,name)=>`<span class="lstep" data-n="${n}"><span class="ln">${n}</span>${esc(name)}</span>`;
+function overviewPanel(){
+ const lc=COMPONENTS.find(c=>c.id==='loop');
+ let h=`<div class="body"><h2>Verification loop — the loop at a glance</h2>
+   <div class="pref">${STEPS.length} steps · one LLM · web search only · cap 4 rounds · code ${esc(lc.path)}</div>
+   <div class="loopdiagram">`;
+ h+=`<span class="lstep entry" data-n="1"><span class="ln">1</span>Plan a query</span>`;
+ h+=`<div class="lconn">▼&nbsp; opening query</div>`;
+ h+=`<div class="lround"><div class="lround-lbl">one round — repeats until confident</div>
+   <div class="lrow">`
+   +loopChip(2,'Search & rerank')+`<span class="ar">→</span>`
+   +loopChip(3,'Read & summarise')+`<span class="ar">→</span>`
+   +loopChip(4,'Synthesise')+`<span class="ar">→</span>`
+   +loopChip(5,'Loop or stop')+
+   `</div>
+   <div class="lback">↺ search again&nbsp; → &nbsp;`+loopChip(6,'Redundancy check')+`&nbsp; → &nbsp;back to step <b>2</b></div></div>`;
+ h+=`<div class="lconn">▼&nbsp; confident, or 4-round cap</div>`;
+ h+=`<span class="lstep exit" data-n="7"><span class="ln">7</span>Produce the verdict</span>`;
+ h+=`</div>`;
+ h+=`<div class="sec"><div class="h">What the loop does</div><p class="ovp">`
+   +`The loop turns one claim into a verdict by going back and forth between <b>searching</b> and <b>reasoning</b>. `
+   +`It writes a search query, keeps the most trustworthy results, reads and summarises them, then weighs the evidence `
+   +`into an analysis — and either stops, confident, or runs one more search aimed at what is still missing. `
+   +`It repeats until confident (or after at most 4 rounds), then produces the verdict plus a confidence rating. `
+   +`One LLM does every step; web search is the only outside tool. `
+   +`<i>Pick any step — in the diagram above or the list at left — to see what it does, why, its exact prompt, and the worked example.</i>`
+   +`</p></div>`;
+ return h+`</div>`;
+}
+
+function show(id){
+ const c=COMPONENTS.find(x=>x.id===id); curNode(id);
+ if(c.simple){ D.className='detail'; D.innerHTML=simplePanel(c); }
+ else {
+   D.className='detail split';
+   D.innerHTML=`<div class="stepcol"><div class="ch">${esc(c.name)} — steps</div>`
+     +`<div class="stp ov" data-n="0"><div class="t"><span class="n">↻</span><span class="nm">Overview</span></div></div>`
+     +c.steps.map(s=>`<div class="stp" data-n="${s.n}"><div class="t"><span class="n">${s.n}</span><span class="nm">${esc(s.name)}</span>${s.llm?'<span class="llm">LLM</span>':''}</div></div>`).join('')
+     +`</div><div id="sbody"></div>`;
+   D.querySelectorAll('.stp').forEach(e=>e.onclick=()=>selStep(+e.dataset.n));
+   selStep(0); // open on the overview primer
+ }
+}
+function selStep(n){
+ D.querySelectorAll('.stp').forEach(e=>e.classList.toggle('cur',+e.dataset.n===n));
+ const sb=document.getElementById('sbody');
+ if(n===0){
+   sb.innerHTML=overviewPanel();
+   sb.querySelectorAll('.lstep[data-n]').forEach(e=>e.onclick=()=>selStep(+e.dataset.n));
+ } else sb.innerHTML=stepDetail(STEPS.find(s=>s.n===n));
+}
+
+show('loop');
+</script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+{
+  "name": "x-post-capture",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Chrome MV3 extension that passively captures X/Twitter post text and exports NDJSON, for research.",
+  "scripts": {
+    "test": "node --test"
+  },
+  "license": "MIT"
+}

@@ -1,0 +1,2 @@
+run_id,timestamp,approach,sc_n,n_claims,seed,accuracy,ece_score,n_refuted,n_supported,n_nei,n_conflicting,acc_refuted,acc_supported,acc_nei,acc_conflicting,extraction_model,verification_model
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,2026-05-11T09:47:27.650927,sc,3,200,0,0.61,0.3455,123,55,10,0,0.6667,0.6182,0.6,,qwen/qwen3-32b,llama-3.3-70b-versatile

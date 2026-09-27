@@ -1,0 +1,47 @@
+[project]
+name = "project"
+version = "0.1.0"
+description = "Add your description here"
+requires-python = ">=3.11"
+dependencies = [
+    "bert-score>=0.3.13",
+    "datasets>=4.8.5",
+    "deepinfra-runner",
+    "emoji>=2.15.0",
+    "huggingface-hub>=1.14.0",
+    "langdetect>=1.0.9",
+    "matplotlib>=3.10.9",
+    "nltk>=3.9.4",
+    "openai>=2.35.1",
+    "pandas>=3.0.2",
+    "polars>=1.40.1",
+    "psycopg[binary]>=3.3.4",
+    "pydantic>=2.13.4",
+    "pypdf>=6.14.2",
+    "python-dotenv>=1.2.2",
+    "rank-bm25>=0.2.2",
+    "requests>=2.33.1",
+    "seaborn>=0.13.2",
+    "sentence-transformers>=5.4.1",
+    "spacy>=3.8.14",
+    "textblob>=0.20.0",
+    "textstat>=0.7.13",
+    "tqdm>=4.67.3",
+    "trafilatura>=2.0.0",
+    "vadersentiment>=3.3.2",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+# _archive/ is frozen, not runnable: its *_test.py files must never be collected.
+norecursedirs = ["_archive", "*/_archive", ".venv", "__pycache__"]
+
+[tool.uv.sources]
+deepinfra-runner = { path = "../tools/deepinfra", editable = true }

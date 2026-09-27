@@ -1,0 +1,134 @@
+{
+  "data": {
+    "user": {
+      "result": {
+        "__typename": "User",
+        "timeline_v2": {
+          "timeline": {
+            "instructions": [
+              {
+                "type": "TimelineAddEntries",
+                "entries": [
+                  {
+                    "entryId": "tweet-2001",
+                    "sortIndex": "7000",
+                    "content": {
+                      "entryType": "TimelineTimelineItem",
+                      "itemContent": {
+                        "itemType": "TimelineTweet",
+                        "tweet_results": {
+                          "result": {
+                            "__typename": "Tweet",
+                            "rest_id": "2001",
+                            "core": {
+                              "user_results": {
+                                "result": {
+                                  "__typename": "User",
+                                  "rest_id": "601",
+                                  "legacy": { "screen_name": "dave", "name": "Dave" }
+                                }
+                              }
+                            },
+                            "legacy": {
+                              "id_str": "2001",
+                              "full_text": "RT @origauthor: This is the original but it is going to be cut off because retweets are truncat…",
+                              "created_at": "Thu Mar 13 10:00:00 +0000 2025",
+                              "lang": "en",
+                              "conversation_id_str": "2001",
+                              "retweeted_status_result": {
+                                "result": {
+                                  "__typename": "Tweet",
+                                  "rest_id": "2000",
+                                  "core": {
+                                    "user_results": {
+                                      "result": {
+                                        "__typename": "User",
+                                        "rest_id": "600",
+                                        "legacy": { "screen_name": "origauthor", "name": "Original Author" }
+                                      }
+                                    }
+                                  },
+                                  "legacy": {
+                                    "id_str": "2000",
+                                    "full_text": "This is the original but it is going to be cut off because retweets are truncated. Except now it is shown in full.",
+                                    "created_at": "Thu Mar 13 08:00:00 +0000 2025",
+                                    "lang": "en",
+                                    "conversation_id_str": "2000",
+                                    "extended_entities": {
+                                      "media": [
+                                        { "id_str": "rm1", "type": "photo", "media_url_https": "https://pbs.twimg.com/media/orig_photo.jpg" }
+                                      ]
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "entryId": "tweet-2002",
+                    "sortIndex": "6999",
+                    "content": {
+                      "entryType": "TimelineTimelineItem",
+                      "itemContent": {
+                        "itemType": "TimelineTweet",
+                        "tweet_results": {
+                          "result": {
+                            "__typename": "Tweet",
+                            "rest_id": "2002",
+                            "core": {
+                              "user_results": {
+                                "result": {
+                                  "__typename": "User",
+                                  "rest_id": "602",
+                                  "legacy": { "screen_name": "eve", "name": "Eve" }
+                                }
+                              }
+                            },
+                            "quoted_status_result": {
+                              "result": {
+                                "__typename": "Tweet",
+                                "rest_id": "1999",
+                                "core": {
+                                  "user_results": {
+                                    "result": {
+                                      "__typename": "User",
+                                      "rest_id": "599",
+                                      "legacy": { "screen_name": "frank", "name": "Frank" }
+                                    }
+                                  }
+                                },
+                                "legacy": {
+                                  "id_str": "1999",
+                                  "full_text": "The quoted message that eve is reacting to.",
+                                  "created_at": "Thu Mar 13 07:30:00 +0000 2025",
+                                  "lang": "en",
+                                  "conversation_id_str": "1999"
+                                }
+                              }
+                            },
+                            "legacy": {
+                              "id_str": "2002",
+                              "full_text": "Look at this take 👀 https://t.co/abc123",
+                              "created_at": "Thu Mar 13 11:00:00 +0000 2025",
+                              "lang": "en",
+                              "conversation_id_str": "2002",
+                              "is_quote_status": true
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}

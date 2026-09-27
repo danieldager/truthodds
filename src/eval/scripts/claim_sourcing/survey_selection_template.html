@@ -1,0 +1,395 @@
+<title>Survey Claim Selection</title>
+<style>
+:root{
+  --paper:#f8f7f4;--ink:#1b1a18;--muted:#6f6b63;--line:#dcd8d0;--soft:#efece6;
+  --accent:#2f3b8f;--accent-ink:#ffffff;--reject:#8a4b3c;--bad:#b3392f;--good:#2f7d4f;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --paper:#171614;--ink:#ece9e2;--muted:#9a958b;--line:#35322c;--soft:#22201c;
+  --accent:#8f9ae6;--accent-ink:#171614;--reject:#d19a86;--bad:#e06a5f;--good:#5fb37f;color-scheme:dark}}
+:root[data-theme="dark"]{
+  --paper:#171614;--ink:#ece9e2;--muted:#9a958b;--line:#35322c;--soft:#22201c;
+  --accent:#8f9ae6;--accent-ink:#171614;--reject:#d19a86;--bad:#e06a5f;--good:#5fb37f;color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding-inline:16px}
+.mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-variant-numeric:tabular-nums}
+.wrap{max-width:1080px;margin:0 auto}
+header{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--paper);border-bottom:1px solid var(--line);margin-inline:-16px;padding:10px 16px}
+.bar{max-width:1080px;margin:0 auto;display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center}
+.bar h1{font-size:17px;font-weight:600;margin:0 auto 0 0;letter-spacing:.01em}
+.tabs{display:flex;flex-wrap:wrap;gap:6px}
+.tab{border:1px solid var(--line);background:none;color:var(--ink);padding:5px 10px;border-radius:3px;cursor:pointer;font:inherit;font-size:13px}
+.tab[aria-pressed="true"]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.tab b{font-weight:500;opacity:.7;margin-left:4px}
+.ctl{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:13px}
+input[type=text],select{font:inherit;font-size:13px;color:var(--ink);background:var(--paper);border:1px solid var(--line);border-radius:3px;padding:5px 8px}
+input[type=text]{width:140px}
+.btn{font:inherit;font-size:13px;border:1px solid var(--line);background:none;color:var(--ink);padding:5px 10px;border-radius:3px;cursor:pointer}
+.btn.dark{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.btn[aria-pressed="true"]{border-color:var(--ink);background:var(--soft)}
+.cuts{max-width:1080px;margin:6px auto 0;font-size:12.5px;color:var(--muted)}
+main{padding-block:22px 60px}
+.nav{display:flex;align-items:center;gap:12px;font-size:13px;color:var(--muted);margin-bottom:16px}
+.nav .pos{margin-right:auto}
+.post{display:grid;grid-template-columns:minmax(0,600px) minmax(300px,1fr);gap:10px 36px;align-items:start}
+@media (max-width:860px){.post{grid-template-columns:1fr}.side{position:static}.pane{height:auto;max-height:60vh}}
+.side{position:sticky;top:calc(env(safe-area-inset-top,0px) + 128px);display:flex;flex-direction:column;gap:10px}
+.ptabs{display:flex;gap:4px;border-bottom:1px solid var(--line)}
+.ptabs button{font:inherit;font-size:13px;background:none;border:0;border-bottom:2px solid transparent;margin-bottom:-1px;padding:6px 10px;color:var(--muted);cursor:pointer}
+.ptabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--ink)}
+.pane{height:calc(100vh - 340px);min-height:260px;overflow-y:auto;padding-right:6px;font-size:13.5px;line-height:1.5}
+.pane .kv{display:grid;grid-template-columns:110px minmax(0,1fr);gap:4px 12px}
+.pane .kv dt{color:var(--muted)}.pane .kv dd{margin:0;overflow-wrap:anywhere}
+.pane .note{white-space:pre-wrap;overflow-wrap:anywhere}
+.pane .lbl{font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin:10px 0 4px}
+.meta{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12.5px;color:var(--muted)}
+.chip{border:1px solid var(--line);border-radius:2px;padding:0 6px;font-size:11.5px;line-height:18px;text-transform:uppercase;letter-spacing:.04em}
+/* the post, drawn the way X draws it */
+.tw{border:1px solid var(--line);border-radius:14px;padding:14px 16px 12px;max-width:600px;background:var(--paper)}
+.tw .who{display:grid;grid-template-columns:44px minmax(0,1fr);gap:0 10px;align-items:center}
+.tw .av{width:44px;height:44px;border-radius:50%;background:var(--soft);object-fit:cover}
+.tw .nm{font-weight:600;font-size:15px;line-height:1.25;display:flex;align-items:center;gap:4px;min-width:0}
+.tw .nm span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tw .vf{width:16px;height:16px;flex:none;fill:#1d9bf0}
+.tw .hd{color:var(--muted);font-size:14px;line-height:1.25}
+.text{white-space:pre-wrap;overflow-wrap:anywhere;margin:10px 0 0;font-size:16px;line-height:1.4}
+.tw .md{display:grid;gap:3px;margin-top:10px;border-radius:12px;overflow:hidden}
+.tw .md.n2,.tw .md.n3,.tw .md.n4{grid-template-columns:1fr 1fr}
+.tw .md img{width:100%;height:100%;max-height:260px;object-fit:cover;display:block;background:var(--soft)}
+.tw .md.n1 img{object-fit:contain;max-height:320px}
+.tw .md .vid{position:relative}
+.tw .md .vid::after{content:"";position:absolute;inset:0;margin:auto;width:56px;height:56px;border-radius:50%;background:rgba(0,0,0,.55) url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="white" d="M8 5v14l11-7z"/></svg>') center/26px no-repeat}
+.tw .qt{border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-top:10px;font-size:14px}
+.tw .qt b{font-weight:600}
+.tw .qt .hd{display:inline}
+.tw .qt p{margin:4px 0 0;white-space:pre-wrap;overflow-wrap:anywhere}
+.tw .dt{color:var(--muted);font-size:13.5px;margin-top:10px}
+.tw .st{display:flex;gap:22px;border-top:1px solid var(--line);margin-top:10px;padding-top:8px;color:var(--muted);font-size:13.5px}
+.tw .st b{color:var(--ink);font-weight:600}
+.claims{display:flex;flex-direction:column;gap:12px;margin-top:14px}
+.claim{display:grid;grid-template-columns:22px minmax(0,1fr);gap:0 10px;align-items:start}
+.sq{width:14px;height:14px;border:1.5px solid var(--ink);margin-top:6px;border-radius:1px}
+.sq.f{background:var(--ink)}
+.claim p{margin:0;font-weight:500;font-size:16px;max-width:70ch}
+.claim .sc{font-size:13px;color:var(--muted);margin-top:2px}
+.pane .just{margin:6px 0 12px;padding:8px 10px;border-left:2px solid var(--line);font-size:13.5px}
+.pane .just .h{font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin-bottom:3px}
+.tb{max-width:560px;margin:10px 0 4px}
+.tb .trk{position:relative;height:10px;background:var(--soft);border-radius:5px;box-shadow:inset 0 0 0 1px var(--line)}
+.tb .fill{position:absolute;top:0;bottom:0;left:var(--l);width:var(--w);background:var(--good);border-radius:5px;opacity:.85}
+.tb .fill.f{background:var(--bad)}
+.tb .fill.u{background:var(--muted);opacity:.55}
+.tb .bnd{position:absolute;top:-5px;bottom:-5px;width:2px;background:var(--ink);left:var(--b);transform:translateX(-1px);border-radius:1px}
+.tb .bnd.t{left:var(--t)}
+.tb .dot{position:absolute;top:50%;width:16px;height:16px;border-radius:50%;background:var(--good);border:2.5px solid var(--paper);box-shadow:0 0 0 1.5px var(--good),0 1px 3px rgba(0,0,0,.25);transform:translate(-50%,-50%);left:var(--x)}
+.tb .dot.f{background:var(--bad);box-shadow:0 0 0 1.5px var(--bad),0 1px 3px rgba(0,0,0,.25)}
+.tb .dot.u{background:var(--muted);box-shadow:0 0 0 1.5px var(--muted),0 1px 3px rgba(0,0,0,.25)}
+.tb .lbl{position:relative;height:18px;margin-top:6px;font-size:10.5px;color:var(--muted)}
+.tb .lbl span{position:absolute;transform:translateX(-50%);line-height:1;top:4px}
+.tb .lbl span::before{content:"";position:absolute;left:50%;top:-6px;width:1px;height:4px;background:var(--line)}
+.tb .lbl span.bd{color:var(--ink);font-weight:600;top:3px}
+.tb .lbl span.bd::before{background:var(--ink);height:5px;top:-7px}
+.tb .ends{display:flex;justify-content:space-between;font-size:11px;letter-spacing:.04em;text-transform:uppercase;margin-top:2px}
+.tb .ends .n{color:var(--bad)}.tb .ends .y{color:var(--good)}.tb .ends .m{color:var(--muted)}
+.vl{font-size:13.5px;margin-top:4px;line-height:1.5}
+.vl b{font-weight:600}
+.vl .t{color:var(--good)}.vl .f{color:var(--bad)}.vl .u{color:var(--muted)}
+.vl .agree{color:var(--muted);font-size:12.5px}
+.vl .dis{color:var(--bad);font-size:12.5px;font-weight:500}
+.ev{display:flex;flex-direction:column;gap:6px;margin-top:4px}
+.ev .row{display:grid;grid-template-columns:18px 22px minmax(0,1fr) 110px;gap:0 10px;align-items:baseline;font-size:13px}
+.ev .row summary{display:contents;cursor:pointer}
+.ev .row .d{color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ev .row .d a{color:inherit;text-decoration:none;border-bottom:1px dotted var(--muted)}
+.ev .row .w{color:var(--muted);text-align:right;white-space:nowrap}
+.ev .row .g{font-weight:500;color:var(--ink)}
+.ev .body{grid-column:2/-1;margin:4px 0 8px;font-size:13px;color:var(--ink)}
+.ev .body blockquote{margin:0 0 4px;padding-left:10px;border-left:2px solid var(--line);color:var(--muted)}
+.ev .body .rs{margin-top:4px}
+.ev .off{color:var(--muted)}
+.dd{display:flex;flex-wrap:wrap;gap:6px 18px;margin-top:14px}
+details{font-size:13px;color:var(--muted)}
+details summary{cursor:pointer;list-style:none;display:inline-block;border-bottom:1px dotted var(--muted)}
+details summary::-webkit-details-marker{display:none}
+details[open]{flex-basis:100%}
+details div{margin-top:6px;white-space:pre-wrap;overflow-wrap:anywhere;max-width:72ch;color:var(--ink)}
+details table{border-collapse:collapse;font-size:13px;margin-top:6px}
+details td{padding:2px 14px 2px 0;vertical-align:top}
+.vote{display:flex;flex-direction:column;gap:8px}
+.vb{display:flex;gap:6px}
+.vb button{flex:1;font:inherit;font-size:13px;padding:7px 0;border:1px solid var(--line);background:none;color:var(--ink);border-radius:3px;cursor:pointer}
+.vb button.sel[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.vb button.rej[aria-pressed="true"]{background:var(--reject);border-color:var(--reject);color:#fff}
+.vb button.abs[aria-pressed="true"]{background:var(--soft);border-color:var(--ink)}
+.vb button.flag[aria-pressed="true"]{background:#b9822f;border-color:#b9822f;color:#fff}
+textarea{font:inherit;font-size:13px;color:var(--ink);background:var(--paper);border:1px solid var(--line);border-radius:3px;padding:6px 8px;resize:vertical;min-height:56px;width:100%}
+.keys{font-size:12px;color:var(--muted)}
+.mine{list-style:none;padding:0;margin:0;display:flex;flex-direction:column}
+.mine li{display:grid;grid-template-columns:70px minmax(0,1fr);gap:12px;padding:10px 0;border-top:1px solid var(--line);cursor:pointer}
+.mine li:last-child{border-bottom:1px solid var(--line)}
+.mine .v{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+.mine .v.select{color:var(--accent)} .mine .v.reject{color:var(--reject)} .mine .v.flag{color:#b9822f}
+.mine .t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mine .c{font-size:13px;color:var(--muted);font-style:italic}
+button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.toast{position:fixed;bottom:calc(16px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:8px 14px;border-radius:3px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none}
+.toast.on{opacity:1}
+.empty{color:var(--muted);padding:40px 0}
+@media (prefers-reduced-motion:reduce){.toast{transition:none}}
+</style>
+
+<header>
+  <div class="bar">
+    <h1>Survey Claim Selection</h1>
+    <div class="tabs" id="tabs"></div>
+    <div class="ctl">
+      <label for="who">Reviewer</label><input type="text" id="who" placeholder="your name">
+      <select id="topic"><option value="">all subtopics</option></select>
+      <button class="btn" id="mine" aria-pressed="false">My votes</button>
+      <button class="btn dark" id="copy">Copy my JSON</button>
+    </div>
+  </div>
+  <div class="cuts mono" id="cuts"></div>
+</header>
+
+<main class="wrap"><div id="view"></div></main>
+<div class="toast" id="toast"></div>
+
+<script>
+const DATA = /*__DATA__*/;
+const CELLS = [["left_false","Left, tool says false"],["left_unclear","Left, tool unclear"],["left_true","Left, tool says true"],
+               ["right_false","Right, tool says false"],["right_unclear","Right, tool unclear"],["right_true","Right, tool says true"],
+               ["neither_false","Unclear lean, false"],["neither_unclear","Unclear lean, tool unclear"],["neither_true","Unclear lean, true"]];
+const VCLS = {"false": "f", "unclear": "u", "true": ""};
+const TOPIC = {immigration:"immigration",economy:"economy",foreign_affairs:"foreign affairs",society_and_culture:"society and culture",
+  elections_and_government:"elections and government",crime_and_justice:"crime and justice",health_and_science:"health and science",other_political:"other"};
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+let cell = "left_false", topic = "", tab = "evidence", showMine = false, votes = {}, pos = {}, uid = null;
+
+try { votes = JSON.parse(localStorage.getItem("scs_votes") || "{}"); pos = JSON.parse(localStorage.getItem("scs_pos") || "{}"); $("#who").value = localStorage.getItem("scs_who") || ""; } catch (e) {}
+try { uid = localStorage.getItem("scs_uid"); if (!uid) { uid = "r" + Math.random().toString(36).slice(2, 10); localStorage.setItem("scs_uid", uid); } } catch (e) { uid = "r" + Date.now(); }
+
+// each reviewer walks every cell in their own shuffled order, fixed by their reviewer id
+function seedOf(s) { let h = 2166136261; for (const ch of s) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; }
+function shuffled(arr, seed) { const a = arr.slice(); let x = seed || 1; for (let i = a.length - 1; i > 0; i--) { x = (x * 1103515245 + 12345) >>> 0; const j = x % (i + 1); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+function queue() { return shuffled(DATA.posts.filter(p => p.cell === cell && (!topic || p.subtopic === topic)), seedOf(uid + cell)); }
+const key = () => cell + "|" + topic;
+
+function fmtScore(c) {
+  if (c.score === null) return "no score";
+  return `${c.score > 0 ? "+" : ""}${c.score.toFixed(1)}, ${c.verdict === "unclear" ? "tool unclear" : "tool says " + c.verdict}`;
+}
+function bar(c) {
+  if (c.score === null) return "";
+  const lo = DATA.meta.score_min, hi = DATA.meta.score_max, bd = DATA.meta.boundary, tt = DATA.meta.true_threshold;
+  const pct = v => Math.max(0, Math.min(100, (v - lo) / (hi - lo) * 100)).toFixed(2) + "%";
+  // the fill runs from the dot to the cut that decides its band: the false boundary for false and unclear, the true threshold for true
+  const vc = VCLS[c.verdict], anchor = c.verdict === "true" ? tt : bd;
+  const p1 = (c.score - lo) / (hi - lo) * 100, p2 = (anchor - lo) / (hi - lo) * 100;
+  const l = Math.max(0, Math.min(p1, p2)).toFixed(2) + "%", w = Math.abs(p1 - p2).toFixed(2) + "%";
+  const ticks = [];
+  for (let t = Math.ceil(lo / 5) * 5; t <= hi; t += 5) if (Math.abs(t - bd) > 2.5 && Math.abs(t - tt) > 2.5) ticks.push(t);
+  const sg = v => `${v > 0 ? "+" : ""}${v.toFixed(1)}`;
+  return `<div class="tb">
+    <div class="trk" style="--b:${pct(bd)};--t:${pct(tt)};--x:${pct(c.score)};--l:${l};--w:${w}"><div class="fill ${vc}"></div><div class="bnd"></div><div class="bnd t"></div><div class="dot ${vc}"></div></div>
+    <div class="lbl mono">${ticks.map(t => `<span style="left:${pct(t)}">${t > 0 ? "+" : ""}${t}</span>`).join("")}<span class="bd" style="left:${pct(bd)}">false ${sg(bd)}</span><span class="bd" style="left:${pct(tt)}">true ${sg(tt)}</span></div>
+    <div class="ends"><span class="n">false</span><span class="m">unclear</span><span class="y">true</span></div></div>`;
+}
+const DIR = {"5":"strongly supports","4":"supports","3":"mixed","X":"off topic","I":"no bearing","2":"contradicts","1":"strongly contradicts"};
+let EV = null, evLoading = null, MEDIA = {};
+const mediaLoaded = {};
+function loadMedia(ci) {
+  if (ci === undefined || mediaLoaded[ci]) return Promise.resolve();
+  mediaLoaded[ci] = fetch(`media_${String(ci).padStart(2, "0")}.json`).then(r => r.json())
+    .then(j => { Object.assign(MEDIA, j); render(); }).catch(() => {});
+  return mediaLoaded[ci];
+}
+async function loadEvidence() {
+  if (EV) return EV;
+  if (!evLoading) evLoading = fetch("evidence.json").then(r => r.json()).then(j => (EV = j)).catch(() => (EV = {}));
+  return evLoading;
+}
+function evidenceHtml(p) {
+  return p.claims.map(c => {
+    const rows = (EV || {})[c.id] || [];
+    return `<div class="ev"><div class="sc mono" style="margin:0">${esc(c.text.slice(0, 90))}${c.text.length > 90 ? "…" : ""}</div>
+      ${c.so ? `<div class="just"><div class="h">Second reader, ${c.so.verdict}, ${c.so.confidence} confidence</div>${esc(c.so.justification)}</div>` : ""}
+      <div class="sc" style="margin:0">query, ${esc(c.query)}</div>
+      ${rows.length ? rows.map((r, i) => {
+        const read = r.status === "prepped" && r.dir;
+        const label = read ? DIR[r.dir] || r.dir : r.status === "origin-dropped" ? "the post itself, dropped" : r.status === "empty-doc" ? "no readable text" : "not read";
+        return `<details class="row"><summary><span class="mono">${i + 1}</span><span class="g mono">${read ? r.dir : ""}</span><span class="d"><a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.domain || r.url)}</a>${r.date ? `<span class="off"> ${esc(r.date)}</span>` : ""}</span><span class="w ${read ? "" : "off"}">${label}</span></summary>
+          <div class="body">${r.cited.length ? r.cited.map(q => `<blockquote>${esc(q)}</blockquote>`).join("") : `<span class="off">no sentences cited</span>`}${r.reason ? `<div class="rs">${esc(r.reason)}</div>` : ""}</div></details>`;
+      }).join("") : `<span class="off">no sources retrieved</span>`}</div>`;
+  }).join("") + `<div class="sc" style="margin-top:8px">Verdict codes, 5 strongly supports, 4 supports, 3 mixed, X off topic, I no bearing, 2 contradicts, 1 strongly contradicts. Unread slots count as I.</div>`;
+}
+const V = { "true": ["t", "true"], "false": ["f", "false"], "unclear": ["u", "unclear"] };
+function verdictLines(c, lean) {
+  if (c.score === null) return `<div class="vl u">no score</div>`;
+  const tool = c.verdict;
+  let h = `<div class="vl">Tool says <b class="${V[tool][0]}">${tool}</b> <span class="mono u">(${c.score > 0 ? "+" : ""}${c.score.toFixed(1)})</span>`;
+  if (c.so) {
+    // tool unclear agrees only with reader unclear; against a reader verdict it neither agrees nor disagrees
+    const a = tool === "unclear" ? (c.so.verdict === "unclear" ? ` <span class="agree">agrees</span>` : ` <span class="agree">(tool unclear)</span>`)
+      : c.so.verdict === "unclear" ? "" : c.so.verdict === tool ? ` <span class="agree">agrees</span>` : ` <span class="dis">disagrees</span>`;
+    h += `<br>Second reader says <b class="${V[c.so.verdict][0]}">${c.so.verdict}</b> <span class="u">(${c.so.confidence} confidence)</span>${a}`;
+  }
+  if (c.lean !== lean) h += `<br><span class="u">This claim leans ${c.lean}</span>`;
+  return h + `</div>`;
+}
+function render() {
+  const cnt = {}; DATA.posts.forEach(p => { cnt[p.cell] = (cnt[p.cell] || 0) + 1; });
+  $("#tabs").innerHTML = CELLS.filter(([k]) => cnt[k]).map(([k, l]) =>
+    `<button class="tab" data-cell="${k}" aria-pressed="${k === cell}">${l}<b>${cnt[k]}</b></button>`).join("");
+  $("#mine").setAttribute("aria-pressed", showMine);
+  const q = queue();
+  if (showMine) return renderMine(q);
+  if (!q.length) { $("#view").innerHTML = `<p class="empty">Nothing in this cell for that subtopic.</p>`; return; }
+  const i = Math.min(pos[key()] || 0, q.length - 1);
+  const done = q.filter(p => (votes[p.id] || {}).v).length;
+  $("#view").innerHTML = `<div class="nav">
+      <span class="pos mono">${i + 1} of ${q.length} in this cell, ${done} voted</span>
+      <button class="btn" id="prev" ${i === 0 ? "disabled" : ""}>Previous</button>
+      <button class="btn" id="next" ${i === q.length - 1 ? "disabled" : ""}>Next</button>
+    </div>${card(q[i])}`;
+}
+function renderMine(q) {
+  const rows = q.filter(p => { const v = votes[p.id] || {}; return v.v || v.c; });
+  $("#view").innerHTML = rows.length ? `<ul class="mine">${rows.map(p => `<li data-id="${p.id}">
+      <span class="v ${(votes[p.id] || {}).v || ""}">${(votes[p.id] || {}).v || "comment"}</span>
+      <span><div class="t">${esc(p.claims[0].text)}</div>${(votes[p.id] || {}).c ? `<div class="c">${esc(votes[p.id].c)}</div>` : ""}</span>
+    </li>`).join("")}</ul>` : `<p class="empty">No votes or comments in this cell yet.</p>`;
+}
+function card(p) {
+  const v = votes[p.id] || {};
+  const lean = p.cell.split("_")[0];
+  const VF = `<svg class="vf" viewBox="0 0 22 22" aria-label="verified"><path d="M20.4 11c0-1.2-.7-2.3-1.7-2.8.3-1.1 0-2.3-.8-3.1-.8-.8-2-1.1-3.1-.8C14.3 3.3 13.2 2.6 12 2.6s-2.3.7-2.8 1.7c-1.1-.3-2.3 0-3.1.8-.8.8-1.1 2-.8 3.1-1 .5-1.7 1.6-1.7 2.8s.7 2.3 1.7 2.8c-.3 1.1 0 2.3.8 3.1.8.8 2 1.1 3.1.8.5 1 1.6 1.7 2.8 1.7s2.3-.7 2.8-1.7c1.1.3 2.3 0 3.1-.8.8-.8 1.1-2 .8-3.1 1-.5 1.7-1.6 1.7-2.8zm-9.6 4.4-3.5-3.5 1.4-1.4 2.1 2.1 4.6-4.6 1.4 1.4-6 6z"/></svg>`;
+  if (!MEDIA[p.id]) loadMedia(p.mc);
+  const md = MEDIA[p.id] || {};
+  const imgs = md.media || [];
+  const media = imgs.length ? `<div class="md n${Math.min(imgs.length, 4)}">${imgs.slice(0, 4).map(m =>
+      m.type === "video" ? `<div class="vid"><img src="${m.src}" alt="video still"></div>` : `<img src="${m.src}" alt="">`).join("")}</div>`
+    : p.n_media ? `<div class="md n1" style="height:200px;background:var(--soft)"></div>`
+    : p.has_media ? `<div class="dt">This post carries media the fetch could not retrieve.</div>` : "";
+  const quoted = p.quoted ? `<div class="qt"><b>${esc(p.quoted.name)}</b> <span class="hd">@${esc(p.quoted.handle)}</span><p>${esc(p.quoted.text)}</p></div>` : "";
+  return `<article class="post" data-id="${p.id}">
+    <div>
+      <div class="meta">
+        <span class="chip">${TOPIC[p.subtopic] || p.subtopic}</span>
+        ${p.country && p.country !== "United States" ? `<span class="chip">${esc(p.country)}</span>` : ""}
+        ${p.recycled ? `<span class="chip">recycled news</span>` : ""}
+      </div>
+      <div class="tw" style="margin-top:8px">
+        <div class="who">
+          ${md.avatar ? `<img class="av" src="${md.avatar}" alt="">` : `<div class="av"></div>`}
+          <div><div class="nm"><span>${esc(p.name)}</span>${p.verified ? VF : ""}</div><div class="hd">@${esc(p.handle)}</div></div>
+        </div>
+        <p class="text">${esc(p.text)}</p>
+        ${media}${quoted}
+        <div class="dt">${p.date.replace("T", " ")}</div>
+        <div class="st"><span><b>${p.likes.toLocaleString()}</b> likes</span>${p.replies !== null ? `<span><b>${p.replies.toLocaleString()}</b> replies</span>` : ""}</div>
+      </div>
+      <div class="claims">${p.claims.map(c => `<div class="claim">
+        <div class="sq ${c.flag ? "f" : ""}"></div>
+        <div><p>${esc(c.text)}</p>
+          ${bar(c)}
+          ${verdictLines(c, lean)}</div></div>`).join("")}</div>
+    </div>
+    <div class="side">
+      <div class="vote">
+        <div class="vb">
+          <button class="sel" data-v="select" aria-pressed="${v.v === "select"}">Select</button>
+          <button class="rej" data-v="reject" aria-pressed="${v.v === "reject"}">Reject</button>
+          <button class="abs" data-v="abstain" aria-pressed="${v.v === "abstain"}">Abstain</button>
+          <button class="flag" data-v="flag" aria-pressed="${v.v === "flag"}">Flag</button>
+        </div>
+        <textarea id="c_${p.id}" placeholder="comment">${esc(v.c || "")}</textarea>
+        <div class="keys">Keys, S select, R reject, A abstain, F flag, arrows to move</div>
+      </div>
+      <div class="ptabs" role="tablist">
+        <button role="tab" data-tab="evidence" aria-selected="${tab === "evidence"}">Evidence</button>
+        <button role="tab" data-tab="note" aria-selected="${tab === "note"}">Note</button>
+        <button role="tab" data-tab="details" aria-selected="${tab === "details"}">Details</button>
+      </div>
+      <div class="pane" id="pane">${paneHtml(p)}</div>
+    </div>
+  </article>`;
+}
+function paneHtml(p) {
+  if (tab === "note") {
+    const noteLabel = p.note_class === "MISINFORMED_OR_POTENTIALLY_MISLEADING" ? "the note says the post is misleading" : p.note_class ? "the note says the post is not misleading" : "no note text";
+    const status = p.note_status === "CURRENTLY_RATED_HELPFUL" ? "rated helpful" : p.note_status === "CURRENTLY_RATED_NOT_HELPFUL" ? "rated not helpful" : "not yet rated";
+    return `<div class="lbl">Community note, ${status}</div><div class="note">${esc(p.note || "no note text")}</div><div class="lbl" style="margin-top:12px">Label</div><div>${noteLabel}${p.quasi ? `. Earlier quasi label, ${p.quasi}` : ""}</div>`;
+  }
+  if (tab === "details") {
+    return `<dl class="kv">
+      <dt>Author</dt><dd>${esc(p.name)} (@${esc(p.handle)})${p.verified ? ", verified" : ""}</dd>
+      <dt>Author leans</dt><dd>${p.author_lean}</dd>
+      <dt>Claim leans</dt><dd>${p.claims.map(c => `${c.lean} (${c.lean_conf})`).join(", ")}</dd>
+      <dt>Country</dt><dd>${esc(p.country || "unknown")}</dd>
+      <dt>Subtopic</dt><dd>${TOPIC[p.subtopic] || p.subtopic}</dd>
+      <dt>Posted</dt><dd>${p.date.replace("T", " ")}</dd>
+      <dt>Reach</dt><dd>${p.likes.toLocaleString()} likes${p.replies !== null ? `, ${p.replies.toLocaleString()} replies` : ""}</dd>
+      <dt>Recycled news</dt><dd>${p.recycled ? "yes, an older event posted as current" : "no"}</dd>
+      <dt>Evidence dated</dt><dd>${p.claims.map(c => c.evidence_month || "unknown").join(", ")}</dd>
+      <dt>Link</dt><dd><a class="mono" href="https://x.com/${esc(p.handle)}/status/${p.id}" target="_blank" rel="noopener">x.com/${esc(p.handle)}/status/${p.id}</a></dd>
+      <dt>Post id</dt><dd class="mono">${p.id}</dd>
+    </dl>`;
+  }
+  if (!EV) { loadEvidence().then(() => { const pane = $("#pane"); if (pane && tab === "evidence") pane.innerHTML = evidenceHtml(p); }); return `<span class="off">loading evidence</span>`; }
+  return evidenceHtml(p);
+}
+
+function persist() { try { localStorage.setItem("scs_votes", JSON.stringify(votes)); } catch (e) {} }
+function setVote(pid, patch) {
+  votes[pid] = { ...(votes[pid] || {}), ...patch, t: new Date().toISOString() };
+  persist();
+}
+function move(d) { const q = queue(); pos[key()] = Math.max(0, Math.min(q.length - 1, (pos[key()] || 0) + d)); try { localStorage.setItem("scs_pos", JSON.stringify(pos)); } catch (e) {} render(); }
+function vote(pid, val) {
+  const cur = (votes[pid] || {}).v;
+  setVote(pid, { v: cur === val ? "" : val });
+  render();
+}
+
+document.addEventListener("click", e => {
+  const t = e.target.closest(".tab"); if (t) { cell = t.dataset.cell; showMine = false; render(); return; }
+  if (e.target.id === "prev") return move(-1);
+  if (e.target.id === "next") return move(1);
+  if (e.target.id === "mine") { showMine = !showMine; render(); return; }
+  const li = e.target.closest(".mine li"); if (li) { const q = queue(); pos[key()] = Math.max(0, q.findIndex(p => p.id === li.dataset.id)); showMine = false; render(); return; }
+  const pt = e.target.closest(".ptabs button"); if (pt) { tab = pt.dataset.tab; const p = DATA.posts.find(x => x.id === pt.closest(".post").dataset.id); pt.parentElement.querySelectorAll("button").forEach(x => x.setAttribute("aria-selected", x.dataset.tab === tab)); $("#pane").innerHTML = paneHtml(p); return; }
+  const b = e.target.closest(".vb button"); if (b) vote(b.closest(".post").dataset.id, b.dataset.v);
+});
+document.addEventListener("input", e => {
+  if (e.target.tagName === "TEXTAREA") setVote(e.target.closest(".post").dataset.id, { c: e.target.value });
+  if (e.target.id === "who") { try { localStorage.setItem("scs_who", e.target.value); } catch (x) {} }
+});
+document.addEventListener("keydown", e => {
+  if (["INPUT", "TEXTAREA", "SELECT"].includes(e.target.tagName) || showMine) return;
+  const a = document.querySelector(".post"); if (!a) return;
+  const k = e.key.toLowerCase();
+  if (k === "arrowright") move(1); else if (k === "arrowleft") move(-1);
+  else if (k === "s") vote(a.dataset.id, "select"); else if (k === "r") vote(a.dataset.id, "reject"); else if (k === "a") vote(a.dataset.id, "abstain"); else if (k === "f") vote(a.dataset.id, "flag");
+});
+$("#topic").addEventListener("change", e => { topic = e.target.value; render(); });
+$("#copy").addEventListener("click", async () => {
+  const out = { reviewer: $("#who").value.trim(), exported: new Date().toISOString(),
+    votes: Object.entries(votes).filter(([, v]) => v.v || v.c).map(([post_id, v]) => {
+      const p = DATA.posts.find(x => x.id === post_id) || {};
+      return { post_id, vote: v.v || "", comment: v.c || "", cell: p.cell, claims: (p.claims || []).map(c => c.id) };
+    }) };
+  const s = JSON.stringify(out, null, 1);
+  try { await navigator.clipboard.writeText(s); toast(`Copied ${out.votes.length} votes as JSON`); }
+  catch (e) { window.prompt("Copy this", s); }
+});
+function toast(m) { const t = $("#toast"); t.textContent = m; t.classList.add("on"); setTimeout(() => t.classList.remove("on"), 1800); }
+
+$("#cuts").textContent = `Tool says false at score ${DATA.meta.boundary.toFixed(4)} or below (frozen boundary), true at ${DATA.meta.true_threshold >= 0 ? "+" : ""}${DATA.meta.true_threshold.toFixed(1)} or above (display only), unclear in between. ${DATA.meta.n_posts} posts, ${DATA.meta.n_claims} claims, built ${DATA.meta.built}.`;
+$("#topic").innerHTML += [...new Set(DATA.posts.map(p => p.subtopic))].sort().map(t => `<option value="${t}">${TOPIC[t] || t}</option>`).join("");
+render();
+
+
+</script>

@@ -1,0 +1,143 @@
+{
+  "model": "7-flag graded (one fitted weight per reader flag; reader read-v5)",
+  "shipped": "2026-09-21",
+  "decided": "2026-09-21",
+  "supersedes": "headline_metrics_v61_sixflag_2026-09-21.json",
+  "baseline_3voice": "eval/data/urn_runs/e1_ctx/headline_metrics_clustered.json",
+  "sibling": "eval/data/urn_runs/e1_ctx/weights_v5_ceiling_bal3000.json",
+  "input": "eval/data/urn_runs/e1_ctx/results-00.jsonl",
+  "population": "eval/data/populations/fc_gold_bal3000.parquet",
+  "population_manifest": "eval/data/populations/manifest.json",
+  "slots": "returned",
+  "pad_to": 10,
+  "demote_blanket": false,
+  "media_axis_excluded": "in the frozen population",
+  "folds": 5,
+  "fold_key": "cluster_id",
+  "smoothing": "+1 per flag / +7 on totals",
+  "flags": [
+    "5",
+    "4",
+    "3",
+    "X",
+    "I",
+    "2",
+    "1"
+  ],
+  "flag_desc": {
+    "5": "states / establishes the claim",
+    "4": "points toward it",
+    "3": "contested / mixed",
+    "X": "on-claim context, no direction",
+    "I": "irrelevant",
+    "2": "points against it",
+    "1": "contradicts / disproves"
+  },
+  "prompt_versions": {
+    "query": "query-v3",
+    "read": "read-v5",
+    "clean": "clean-v2",
+    "prep": "prep-v7"
+  },
+  "prompt_hashes": {
+    "query": "602caa42bd95",
+    "read": "92404a300e14"
+  },
+  "prompt_hash_note": "the E1 run predates prompt-hash stamping (Phase 1, 2026-09-08); these hash the current text of the versions the run rows name",
+  "frozen_note": "the FROZEN survey instrument (Daniel 2026-09-21): read-v5 @ DeepSeek-V4-Flash, seven flags, query-v3 -> Serper top-10, scored with weights_v5_ceiling_bal3000.json on fc_gold_bal3000. This file mirrors that flat weights file; regenerate both with `fit_ceiling_weights --ship --force`.",
+  "bootstrap": {
+    "reps": 2000,
+    "seed": 707,
+    "design": "cluster_id"
+  },
+  "overall": {
+    "n": 3000,
+    "n_true": 1500,
+    "n_false": 1500,
+    "auc_oof": 0.8569157777777778,
+    "auc_insample": 0.8597773333333333,
+    "auc_ci95": [
+      0.8437894083899286,
+      0.8678614908441181
+    ],
+    "auc_ci95_row": [
+      0.8431998333333334,
+      0.8682696111111111
+    ],
+    "recall_at_2pct_fpr": 0.4166666666666667,
+    "fpr": 0.023333333333333334,
+    "lr_plus": 17.857142857142858,
+    "threshold": -4.011463855527319,
+    "threshold_rule": "nested: mean of the five per-fold thresholds, each picked at FPR <= 2% on that fold's inner out-of-fold scores",
+    "thresholds_by_fold": [
+      -3.951579212760561,
+      -3.763705307015768,
+      -4.145121706907969,
+      -3.9985662263156057,
+      -4.198346824636695
+    ],
+    "threshold_spread": {
+      "min": -4.198346824636695,
+      "max": -3.763705307015768,
+      "std": 0.1535750520221064
+    },
+    "insample": {
+      "recall": 0.38533333333333336,
+      "fpr": 0.017333333333333333,
+      "threshold": -4.134780363840978,
+      "lr_plus": 22.230769230769234,
+      "baseline_recall": 0.3333333333333333,
+      "baseline_fpr": 0.02
+    },
+    "weights": {
+      "5": 2.9021826255604424,
+      "4": 1.3629323720579885,
+      "3": -0.6931815737036756,
+      "X": 0.28924941664528264,
+      "I": -0.18739017138309824,
+      "2": -0.7388948123686282,
+      "1": -2.4642482971670145
+    },
+    "weights_ci": {
+      "5": [
+        2.6642018889798966,
+        3.1633379694334307
+      ],
+      "4": [
+        1.1897292284324796,
+        1.576313973632936
+      ],
+      "3": [
+        -1.2687318686734175,
+        -0.16880733591063413
+      ],
+      "X": [
+        0.1702950396232934,
+        0.41060478284775737
+      ],
+      "I": [
+        -0.22910226923847982,
+        -0.1460326435807114
+      ],
+      "2": [
+        -0.9580573803967555,
+        -0.5337482928957354
+      ],
+      "1": [
+        -2.689198462082991,
+        -2.253286664471414
+      ]
+    },
+    "delta_auc_oof_vs_3voice": 0.010219111111111179,
+    "delta_auc_ci95": [
+      0.0037977311986339664,
+      0.016655528449741854
+    ]
+  },
+  "silence_rule": {
+    "recall_at_2pct_fpr": 0.4166666666666667,
+    "auc_oof_silent_as_pass": 0.6963337777777778,
+    "n_silent_true": 333,
+    "n_silent_false": 431
+  }
+}

@@ -1,0 +1,7 @@
+metric,value
+n_posts,1000.0
+n_extracted_pos,106.0
+n_extracted_neg,894.0
+tp,92.0
+fp,14.0
+precision,0.8679245283018868

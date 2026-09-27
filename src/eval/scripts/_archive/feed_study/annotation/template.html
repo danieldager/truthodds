@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<!--
+  Self-contained tweet-labeling tool. Generated per-annotator by make_tasks.py,
+  which replaces the __TASK_DATA__ token below with an embedded JSON task.
+  No server, no install: open in any browser, label, click "Download results".
+  Progress auto-saves to this browser; close and reopen to resume.
+
+  Switch UI: each label is a light. One key flips one light.
+    GATE pass  (1 light):  Up = ON (caught & checked) + next,  Down = OFF + next.
+    CATS pass  (3 lights):  remappable arrows flip R / V / H  (off -> on -> unsure),
+                            default Left/Down/Right; Enter or Space commits + next.
+    Any time:  i = mark image-dependent,  g = guidelines,  comma = key settings.
+
+  Two-pass design keeps the holistic GATE independent of V/R/H: one pass is GATE
+  only, the other is V/R/H only (re-shuffled, GATE answers never shown). Which
+  pass comes first is fixed per annotator by make_tasks.py.
+
+  Rubric mirrors docs/labeling_guideline.md (kept in sync).
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tweet labeling</title>
+<style>
+  :root { --fg:#111; --mut:#666; --line:#ddd; --bg:#fff; }
+  * { box-sizing: border-box; }
+  body { font: 16px/1.5 -apple-system, system-ui, "Segoe UI", Roboto, sans-serif;
+         color: var(--fg); background: var(--bg); margin: 0; }
+  .wrap { max-width: 680px; margin: 0 auto; padding: 16px 20px 80px; }
+  header { display:flex; justify-content:space-between; align-items:baseline;
+           border-bottom:1px solid var(--line); padding-bottom:8px; }
+  header .who { font-weight:600; }
+  header .phase { color:var(--mut); font-size:13px; }
+  .bar { height:4px; background:var(--line); border-radius:2px; margin:10px 0 16px; }
+  .bar > i { display:block; height:100%; background:var(--fg); border-radius:2px; width:0; transition:width .15s; }
+  .count { color:var(--mut); font-size:13px; margin-bottom:14px; }
+  .card { border:1px solid var(--line); border-radius:8px; padding:16px 18px; margin-bottom:18px; }
+  .meta { color:var(--mut); font-size:13px; margin-bottom:10px; }
+  .text { font-size:18px; white-space:pre-wrap; word-wrap:break-word; }
+  .imgflag { margin-top:12px; font-size:13px; color:var(--mut); cursor:pointer; user-select:none;
+             display:inline-flex; align-items:center; gap:6px; }
+  .imgflag.on { color:var(--fg); font-weight:600; }
+
+  .switches { display:flex; gap:26px; justify-content:center; flex-wrap:wrap; margin:8px 0 6px; }
+  .sw { display:flex; flex-direction:column; align-items:center; gap:7px; cursor:pointer;
+        user-select:none; width:120px; }
+  .sw .name { font-weight:600; font-size:15px; }
+  .sw .sub  { color:var(--mut); font-size:11px; text-align:center; min-height:14px; }
+  .track { width:70px; height:34px; border:2px solid var(--fg); border-radius:18px; position:relative; }
+  .knob  { position:absolute; top:3px; left:3px; width:24px; height:24px; border-radius:50%;
+           border:2px solid var(--fg); background:var(--bg); transition:left .12s, background .12s;
+           display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700; }
+  .on  .knob { left:38px; background:var(--fg); color:var(--bg); }
+  .on  .knob::after { content:"●"; }
+  .unsure .knob { left:20px; }
+  .unsure .knob::after { content:"?"; }
+  .state { font-size:12px; color:var(--mut); letter-spacing:.04em; }
+  .key { font:12px monospace; border:1px solid var(--line); border-bottom-width:2px;
+         border-radius:4px; padding:1px 6px; background:#fafafa; }
+
+  .commit { margin-top:18px; text-align:center; }
+  .foot { position:fixed; left:0; right:0; bottom:0; background:var(--bg);
+          border-top:1px solid var(--line); padding:8px 20px; font-size:13px; color:var(--mut);
+          display:flex; justify-content:space-between; align-items:center; gap:12px; }
+  .linkbtn { color:var(--fg); cursor:pointer; text-decoration:underline; background:none;
+             border:none; font:inherit; padding:0; }
+  .center { text-align:center; padding:40px 0; }
+  .center h2 { margin:0 0 10px; }
+  .center p { color:var(--mut); }
+  .big { display:inline-block; margin-top:18px; padding:12px 26px; font:inherit; font-weight:600;
+         border:1px solid var(--fg); border-radius:6px; background:var(--bg); cursor:pointer; }
+
+  /* overlay (guidelines + settings) */
+  .ov { position:fixed; inset:0; background:rgba(255,255,255,.98); overflow:auto; z-index:10;
+        padding:28px 20px 60px; display:none; }
+  .ov.show { display:block; }
+  .ov .inner { max-width:680px; margin:0 auto; }
+  .ov h2 { margin:0 0 4px; }
+  .ov h3 { margin:22px 0 4px; }
+  .ov .def { font-size:15px; }
+  .ov table { border-collapse:collapse; width:100%; font-size:13px; margin:8px 0; }
+  .ov td, .ov th { border:1px solid var(--line); padding:5px 8px; text-align:left; vertical-align:top; }
+  .ov .yes { font-weight:700; }
+  .ov .close { position:sticky; top:0; float:right; }
+  .rebind { display:flex; align-items:center; gap:12px; margin:8px 0; }
+  .rebind .cur { font:13px monospace; }
+  .muted { color:var(--mut); font-size:13px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <span class="who" id="who"></span>
+    <span class="phase" id="phase"></span>
+  </header>
+  <div class="bar"><i id="barfill"></i></div>
+  <div class="count" id="count"></div>
+  <div id="stage"></div>
+</div>
+
+<div class="foot">
+  <span id="hint"></span>
+  <span>
+    <button class="linkbtn" id="guideBtn">Guidelines</button> &nbsp;
+    <button class="linkbtn" id="setBtn">Keys</button> &nbsp;
+    <button class="linkbtn" id="undo">&larr; Undo</button> &nbsp;
+    <button class="linkbtn" id="dl">Download</button> &nbsp;
+    <button class="linkbtn" id="reset">Reset</button>
+  </span>
+</div>
+
+<div class="ov" id="guideOv"><div class="inner">
+  <button class="big close" onclick="closeOv()">Close</button>
+  <div id="guideBody"></div>
+</div></div>
+<div class="ov" id="setOv"><div class="inner">
+  <button class="big close" onclick="closeOv()">Close</button>
+  <h2>Category keys</h2>
+  <p class="muted">In the V/R/H pass, each light has a key. Click "rebind", then press an
+     arrow key (← ↑ ↓ →). Defaults: R = ←, V = ↓, H = →.</p>
+  <div id="rebinds"></div>
+  <p class="muted">Reserved: Enter/Space commit, Backspace undo, ↑/↓ are the FLAG pass.</p>
+</div></div>
+
+<script id="task" type="application/json">__TASK_DATA__</script>
+<script>
+"use strict";
+const TASK = JSON.parse(document.getElementById("task").textContent);
+const SCHEMA = "vrhg-2pass-switch-1";
+const LSKEY = "annot:" + SCHEMA + ":" + TASK.annotator;
+const KMKEY = "annot:keymap:" + TASK.annotator;
+
+// Category lights. Keys are user-remappable (KEYMAP); middle defaults to ArrowDown.
+const DIMS = [
+  { key:"R", name:"Relevant",   def:"Public consequence (politics, health, safety, society) — not personal, promotional, or sports/entertainment." },
+  { key:"V", name:"Verifiable", def:"A specific factual proposition checkable against evidence — not opinion, joke, question, or prediction." },
+  { key:"H", name:"Harmful",    def:"Could erode trust, discourage protection, scapegoat a group, stoke fear, or push conspiracy. Societal, directional." },
+];
+const DEFAULT_KEYMAP = { R:"ArrowLeft", V:"ArrowDown", H:"ArrowRight" };
+let KEYMAP = loadKeymap();
+const ARROW = { ArrowLeft:"←", ArrowRight:"→", ArrowUp:"↑", ArrowDown:"↓" };
+
+const GATE_DEF = "Holistic gut call: would our tool catch this post and pass it to the fact-checker (ON), or ignore it (OFF)? Answer on instinct — don't decompose it.";
+const PASSES = TASK.pass_order;       // ["gate","cats"] or ["cats","gate"]
+const N = TASK.posts.length;
+
+// Guideline examples (mirror docs/labeling_guideline.md).
+const GUIDE = {
+  V: [["The unemployment rate dropped to 3.5% last month.","YES","a checkable statistic"],
+      ["Vaccines contain microchips that track you.","YES","specific claim (false ≠ unverifiable)"],
+      ["I think this government is the worst we've ever had.","NO","opinion"],
+      ["Can you believe how hot it is today??","NO","question, no factual core"]],
+  R: [["New EU law will ban new gas cars by 2035.","YES","public policy"],
+      ["Measles cases are rising as vaccination rates fall.","YES","public health"],
+      ["Amad Diallo gives Ivory Coast the lead in the 84th minute!","NO","sports, no public angle"],
+      ["This new café downtown has the best croissants.","NO","personal / promotional"]],
+  H: [["Don't bother with seatbelts, airbags do all the work.","YES","discourages protection"],
+      ["The election was rigged by the electoral commission.","YES","erodes trust / conspiracy"],
+      ["Migrants are the reason crime is rising.","YES","scapegoats a group"],
+      ["Aspirin was first synthesized in 1897.","NO","verifiable but harmless"]],
+};
+
+// ---- persisted state ----
+let S = load() || {
+  answers: {},                  // post_id -> {gate, V, R, H, needs_image}
+  cursor: { passIdx:0, pos:0 },
+  timings: [],                  // {post_id, pass, ms}
+  started: 0,
+};
+let lastTick = Date.now();
+let breakDismissed = false;
+let rebinding = null;           // dim key awaiting a new arrow
+
+function load(){ try { return JSON.parse(localStorage.getItem(LSKEY)); } catch(e){ return null; } }
+function save(){ localStorage.setItem(LSKEY, JSON.stringify(S)); }
+function loadKeymap(){ try { return Object.assign({}, DEFAULT_KEYMAP, JSON.parse(localStorage.getItem(KMKEY))); }
+                       catch(e){ return Object.assign({}, DEFAULT_KEYMAP); } }
+function saveKeymap(){ localStorage.setItem(KMKEY, JSON.stringify(KEYMAP)); }
+function ans(pid){ return (S.answers[pid] ||= {}); }
+function orderFor(pass){ return pass==="gate" ? TASK.gate_order : TASK.cat_order; }
+function curPass(){ return PASSES[S.cursor.passIdx]; }
+function curPost(){ return TASK.posts[ orderFor(curPass())[S.cursor.pos] ]; }
+function badge(dimKey){ return ARROW[KEYMAP[dimKey]] || "?"; }
+
+function totalQs(){ return N * PASSES.length; }
+function doneQs(){ return S.cursor.passIdx*N + S.cursor.pos; }
+
+// ---- commit + advance (one post) ----
+function advance(){
+  const c=S.cursor; c.pos++;
+  if (c.pos>=N){ c.passIdx++; c.pos=0; }
+  save(); render();
+}
+function commitGate(val){
+  const p=curPost();
+  ans(p.post_id).gate = val;
+  S.timings.push({post_id:p.post_id, pass:"gate", ms:Date.now()-lastTick});
+  lastTick=Date.now(); advance();
+}
+function commitCats(){
+  const p=curPost(), a=ans(p.post_id);
+  for (const d of DIMS) if (a[d.key]===undefined) a[d.key]="n";   // untouched = no
+  S.timings.push({post_id:p.post_id, pass:"cats", ms:Date.now()-lastTick});
+  lastTick=Date.now(); advance();
+}
+function cycle(field){
+  const a=ans(curPost().post_id), cur=a[field]||"n";
+  a[field] = cur==="n" ? "y" : cur==="y" ? "u" : "n";
+  save(); render();
+}
+function toggleImage(){
+  const a=ans(curPost().post_id);
+  a.needs_image = !a.needs_image;
+  save(); render();
+}
+
+function undo(){
+  const c=S.cursor;
+  if (c.passIdx>=PASSES.length){ c.passIdx=PASSES.length-1; c.pos=N-1; }
+  else if (c.pos>0){ c.pos--; }
+  else if (c.passIdx>0){ c.passIdx--; c.pos=N-1; }
+  else return;
+  lastTick=Date.now(); save(); render();
+}
+
+// ---- rendering ----
+const el = id => document.getElementById(id);
+function esc(s){ return String(s).replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+function setProgress(){
+  el("barfill").style.width = (100*doneQs()/totalQs()).toFixed(1)+"%";
+  el("count").textContent = doneQs()+" / "+totalQs()+" posts";
+}
+function meta(p){ return [p.screen_name?"@"+p.screen_name:null, p.lang, p.created_at].filter(Boolean).join("  ·  "); }
+
+function render(){
+  el("who").textContent = "Annotator " + TASK.annotator;
+  const c=S.cursor;
+  if (!S.started) return screenIntro();
+  if (c.passIdx>=PASSES.length) return screenDone();
+  if (c.pos===0 && c.passIdx>0 && !breakDismissed) return screenBreak();
+
+  const pass=curPass(), post=curPost();
+  el("phase").textContent = "Pass "+(c.passIdx+1)+" of "+PASSES.length+"  ·  "+(pass==="gate"?"FLAG":"CATEGORIES");
+  setProgress();
+  const stage=el("stage"); stage.innerHTML="";
+
+  const a=ans(post.post_id);
+  const card=document.createElement("div"); card.className="card";
+  card.innerHTML='<div class="meta">'+esc(meta(post))+'</div><div class="text">'+esc(post.text)+'</div>'
+    +'<div class="imgflag'+(a.needs_image?" on":"")+'" id="imgflag">'
+    +(a.needs_image?"☑":"☐")+' image-dependent — can’t fully judge from text <span class="key">i</span></div>';
+  stage.appendChild(card);
+  card.querySelector("#imgflag").onclick=toggleImage;
+
+  if (pass==="gate") renderGate(stage, post);
+  else renderCats(stage, post);
+}
+
+function renderGate(stage, post){
+  const a=ans(post.post_id);
+  const wrap=document.createElement("div"); wrap.className="switches";
+  const sw=document.createElement("div"); sw.className="sw"+(a.gate==="y"?" on":"");
+  sw.innerHTML='<div class="name">FLAG</div><div class="track"><div class="knob"></div></div>'+
+    '<div class="state">'+(a.gate==="y"?"ON — caught":a.gate==="n"?"OFF — ignored":"&nbsp;")+'</div>'+
+    '<div class="sub">would our tool check this?</div>';
+  sw.onclick=()=>commitGate(a.gate==="y"?"n":"y");
+  wrap.appendChild(sw); stage.appendChild(wrap);
+  const c=document.createElement("div"); c.className="commit";
+  c.innerHTML='<span class="key">↑</span> ON &amp; next &nbsp;&nbsp; <span class="key">↓</span> OFF &amp; next';
+  stage.appendChild(c);
+  el("hint").innerHTML='<span class="key">↑</span> ON &nbsp; <span class="key">↓</span> OFF &nbsp; <span class="key">i</span> image &nbsp; <span class="key">⌫</span> undo';
+}
+
+function renderCats(stage, post){
+  const a=ans(post.post_id);
+  const wrap=document.createElement("div"); wrap.className="switches";
+  for (const d of DIMS){
+    const st=a[d.key]||"n";
+    const sw=document.createElement("div");
+    sw.className="sw"+(st==="y"?" on":st==="u"?" unsure":"");
+    sw.innerHTML='<div class="name">'+d.name+' <span class="key">'+badge(d.key)+'</span></div>'+
+      '<div class="track"><div class="knob"></div></div>'+
+      '<div class="state">'+(st==="y"?"YES":st==="u"?"UNSURE":"no")+'</div><div class="sub"></div>';
+    sw.onclick=()=>cycle(d.key);
+    wrap.appendChild(sw);
+  }
+  stage.appendChild(wrap);
+  const c=document.createElement("div"); c.className="commit";
+  c.innerHTML='<button class="big" id="commitbtn">Commit &amp; next &nbsp;<span class="key">⏎</span></button>';
+  stage.appendChild(c);
+  el("commitbtn").onclick=commitCats;
+  el("hint").innerHTML='<span class="key">'+badge("R")+'</span>R <span class="key">'+badge("V")+'</span>V <span class="key">'+badge("H")+'</span>H'+
+    ' (tap again = unsure) &nbsp; <span class="key">⏎</span> commit &nbsp; <span class="key">i</span> image &nbsp; <span class="key">⌫</span> undo';
+}
+
+function screenIntro(){
+  el("phase").textContent=""; el("hint").textContent="";
+  el("barfill").style.width="0"; el("count").textContent="";
+  const first=PASSES[0];
+  el("stage").innerHTML=
+    '<div class="center"><h2>Tweet labeling — '+N+' posts</h2>'+
+    '<p>Two short passes. <b>Pass 1 of '+PASSES.length+': '+(first==="gate"?"the FLAG switch":"the R / V / H switches")+'</b>.<br>'+
+    'Flip lights with the arrow keys (or click). Progress saves automatically.</p>'+
+    '<button class="big" id="readGuide">Read the guidelines first</button><br>'+
+    '<button class="big" id="go">Start</button></div>';
+  el("readGuide").onclick=openGuide;
+  el("go").onclick=()=>{ S.started=Date.now(); lastTick=Date.now(); save(); render(); };
+}
+function screenBreak(){
+  el("phase").textContent=""; el("hint").textContent=""; setProgress();
+  const nxt=curPass();
+  el("stage").innerHTML=
+    '<div class="center"><h2>Pass 1 complete — nice work.</h2>'+
+    '<p>Pass 2 asks the <b>'+(nxt==="gate"?"FLAG switch":"R / V / H switches")+'</b> on the same posts, '+
+    're-shuffled. Answer fresh — your earlier answers are hidden on purpose.<br>'+
+    'Take a break if you like; progress is saved.</p>'+
+    '<button class="big" id="go2">Start Pass 2</button></div>';
+  el("go2").onclick=()=>{ breakDismissed=true; lastTick=Date.now(); render(); };
+}
+function screenDone(){
+  el("phase").textContent="done"; el("hint").textContent=""; setProgress();
+  el("stage").innerHTML=
+    '<div class="center"><h2>All done — thank you!</h2>'+
+    '<p>Download your results file, then email it back to Daniel.</p>'+
+    '<button class="big" id="go3">Download results</button>'+
+    '<p style="margin-top:14px;font-size:13px">You can re-download anytime from the bar below.</p></div>';
+  el("go3").onclick=download; download();
+}
+
+// ---- overlays ----
+function guideExamples(dim){
+  return '<table><tr><th>tweet</th><th>'+dim+'</th><th>why</th></tr>'+
+    GUIDE[dim].map(r=>'<tr><td>'+esc(r[0])+'</td><td class="'+(r[1]==="YES"?"yes":"")+'">'+r[1]+'</td><td>'+esc(r[2])+'</td></tr>').join('')+
+    '</table>';
+}
+function openGuide(){
+  el("guideBody").innerHTML=
+    '<h2>Labeling guidelines</h2>'+
+    '<p class="muted">Label what the <b>text</b> says (no images shown). If the text alone can’t carry the call, mark <b>image-dependent</b> (<span class="key">i</span>) and answer as best you can.</p>'+
+    '<h3>FLAG — holistic</h3><div class="def">'+esc(GATE_DEF)+'</div>'+
+    '<h3>V — Verifiable</h3><div class="def">'+esc(DIMS.find(d=>d.key==="V").def)+'</div>'+guideExamples("V")+
+    '<h3>R — Relevant</h3><div class="def">'+esc(DIMS.find(d=>d.key==="R").def)+'</div>'+guideExamples("R")+
+    '<h3>H — Harmful</h3><div class="def">'+esc(DIMS.find(d=>d.key==="H").def)+'</div>'+guideExamples("H")+
+    '<p class="muted">Use <b>unsure</b> (tap the key twice) sparingly — only for genuinely ambiguous cases.</p>';
+  el("guideOv").classList.add("show");
+}
+function openSettings(){
+  const box=el("rebinds"); box.innerHTML="";
+  for (const d of DIMS){
+    const row=document.createElement("div"); row.className="rebind";
+    row.innerHTML='<b>'+d.name+'</b> <span class="cur">'+badge(d.key)+' ('+KEYMAP[d.key]+')</span>'+
+      '<button class="linkbtn">rebind</button>';
+    row.querySelector("button").onclick=()=>{ rebinding=d.key;
+      row.querySelector(".cur").textContent="press an arrow…"; };
+    box.appendChild(row);
+  }
+  el("setOv").classList.add("show");
+}
+function closeOv(){ el("guideOv").classList.remove("show"); el("setOv").classList.remove("show"); rebinding=null; }
+function overlayOpen(){ return el("guideOv").classList.contains("show") || el("setOv").classList.contains("show"); }
+
+// ---- output ----
+function result(){
+  return { schema:SCHEMA, annotator:TASK.annotator, pass_order:TASK.pass_order, keymap:KEYMAP,
+           started:S.started, finished:Date.now(), labels:S.answers, timings:S.timings };
+}
+function download(){
+  const blob=new Blob([JSON.stringify(result(),null,2)],{type:"application/json"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob); a.download="labels_"+TASK.annotator+".json";
+  document.body.appendChild(a); a.click(); a.remove();
+}
+
+// ---- keyboard ----
+document.addEventListener("keydown", e=>{
+  if (e.metaKey||e.ctrlKey||e.altKey) return;
+  // rebinding capture (settings overlay)
+  if (rebinding && ARROW[e.key]){
+    e.preventDefault();
+    if (Object.entries(KEYMAP).some(([k,v])=>k!==rebinding && v===e.key)){ return; } // no dup
+    KEYMAP[rebinding]=e.key; saveKeymap(); rebinding=null; openSettings(); return;
+  }
+  if (e.key==="Escape"){ closeOv(); return; }
+  if (overlayOpen()) return;
+  if (e.key==="g"){ openGuide(); return; }
+  if (e.key===","){ openSettings(); return; }
+  if (e.key==="Backspace"){ e.preventDefault(); breakDismissed=true; undo(); return; }
+  const c=S.cursor;
+  const onQ = S.started && c.passIdx<PASSES.length && !(c.pos===0 && c.passIdx>0 && !breakDismissed);
+  if (!onQ) return;
+  if (e.key==="i"){ e.preventDefault(); toggleImage(); return; }
+  const pass=curPass();
+  if (pass==="gate"){
+    if (e.key==="ArrowUp"){ e.preventDefault(); commitGate("y"); }
+    else if (e.key==="ArrowDown"){ e.preventDefault(); commitGate("n"); }
+  } else {
+    const dim=DIMS.find(d=>KEYMAP[d.key]===e.key);
+    if (dim){ e.preventDefault(); cycle(dim.key); }
+    else if (e.key==="Enter" || e.key===" "){ e.preventDefault(); commitCats(); }
+  }
+});
+
+el("guideBtn").onclick=openGuide;
+el("setBtn").onclick=openSettings;
+el("undo").onclick=()=>{ breakDismissed=true; undo(); };
+el("dl").onclick=download;
+el("reset").onclick=()=>{ if(confirm("Erase all your labels for this file and start over?")){
+  localStorage.removeItem(LSKEY); location.reload(); } };
+
+render();
+</script>
+</body>
+</html>

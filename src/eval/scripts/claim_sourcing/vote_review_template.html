@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Survey Vote Review</title>
+<style>
+:root{
+  --paper:#f8f7f4;--ink:#1b1a18;--muted:#6f6b63;--line:#dcd8d0;--soft:#efece6;
+  --accent:#2f3b8f;--accent-ink:#ffffff;--reject:#8a4b3c;--flag:#b9822f;--bad:#b3392f;--good:#2f7d4f;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --paper:#171614;--ink:#ece9e2;--muted:#9a958b;--line:#35322c;--soft:#22201c;
+  --accent:#8f9ae6;--accent-ink:#171614;--reject:#d19a86;--flag:#e0b268;--bad:#e06a5f;--good:#5fb37f;color-scheme:dark}}
+:root[data-theme="dark"]{
+  --paper:#171614;--ink:#ece9e2;--muted:#9a958b;--line:#35322c;--soft:#22201c;
+  --accent:#8f9ae6;--accent-ink:#171614;--reject:#d19a86;--flag:#e0b268;--bad:#e06a5f;--good:#5fb37f;color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding-inline:16px}
+.mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-variant-numeric:tabular-nums}
+.wrap{max-width:1080px;margin:0 auto}
+header{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--paper);border-bottom:1px solid var(--line);margin-inline:-16px;padding:10px 16px}
+.bar{max-width:1080px;margin:0 auto;display:flex;flex-direction:column;gap:8px}
+.top{display:flex;flex-wrap:wrap;gap:4px 18px;align-items:baseline}
+.top h1{font-size:17px;font-weight:600;margin:0;letter-spacing:.01em}
+.stats{font-size:13px;color:var(--muted)}
+.stats b{color:var(--ink);font-weight:600}
+.row{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.row .sp{flex:1}
+.tab,.btn{border:1px solid var(--line);background:none;color:var(--ink);padding:4px 10px;border-radius:3px;cursor:pointer;font:inherit;font-size:13px}
+.tab[aria-pressed="true"]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.btn[aria-pressed="true"]{border-color:var(--ink);background:var(--soft)}
+.tab b,.btn b{font-weight:500;opacity:.7;margin-left:4px}
+.btn:disabled{opacity:.4;cursor:default}
+main{padding-block:22px 60px}
+.nav{display:flex;align-items:center;gap:12px;font-size:13px;color:var(--muted);margin-bottom:16px}
+.nav .pos{margin-right:auto}
+.post{display:grid;grid-template-columns:minmax(0,600px) minmax(300px,1fr);gap:10px 36px;align-items:start}
+@media (max-width:860px){.post{grid-template-columns:1fr}.side{position:static}.pane{height:auto;max-height:60vh}}
+.side{position:sticky;top:calc(env(safe-area-inset-top,0px) + 215px);display:flex;flex-direction:column;gap:12px}
+.meta{display:flex;flex-wrap:wrap;gap:4px 10px;font-size:12.5px;color:var(--muted)}
+.chip{border:1px solid var(--line);border-radius:2px;padding:0 6px;font-size:11.5px;line-height:18px;text-transform:uppercase;letter-spacing:.04em}
+.chip.gone{border-color:var(--flag);color:var(--flag)}
+/* votes */
+.votes{border:1px solid var(--line);border-radius:6px;padding:10px 12px}
+.votes .h{font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin-bottom:6px}
+.vr{display:grid;grid-template-columns:64px 76px minmax(0,1fr);gap:0 10px;align-items:baseline;padding:5px 0;border-top:1px solid var(--line);font-size:13.5px}
+.vr:first-of-type{border-top:0}
+.vr .c{white-space:pre-wrap;overflow-wrap:anywhere}
+.vc{display:inline-block;min-width:64px;text-align:center;font-size:11.5px;line-height:19px;border-radius:3px;text-transform:uppercase;letter-spacing:.04em;border:1px solid transparent}
+.vc.select{background:var(--accent);color:var(--accent-ink)}
+.vc.reject{background:var(--reject);color:#fff}
+.vc.abstain{background:var(--soft);color:var(--muted);border-color:var(--line)}
+.vc.flag{background:var(--flag);color:#fff}
+.vc.none{color:var(--muted)}
+.vc.sm{min-width:0;width:22px;padding:0;font-size:10.5px;line-height:17px}
+/* the post, drawn the way X draws it (copied from the selection board) */
+.tw{border:1px solid var(--line);border-radius:14px;padding:14px 16px 12px;max-width:600px;background:var(--paper)}
+.tw .who{display:grid;grid-template-columns:44px minmax(0,1fr);gap:0 10px;align-items:center}
+.tw .av{width:44px;height:44px;border-radius:50%;background:var(--soft);object-fit:cover}
+.tw .nm{font-weight:600;font-size:15px;line-height:1.25;display:flex;align-items:center;gap:4px;min-width:0}
+.tw .nm span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tw .vf{width:16px;height:16px;flex:none;fill:#1d9bf0}
+.tw .hd{color:var(--muted);font-size:14px;line-height:1.25}
+.text{white-space:pre-wrap;overflow-wrap:anywhere;margin:10px 0 0;font-size:16px;line-height:1.4}
+.tw .md{display:grid;gap:3px;margin-top:10px;border-radius:12px;overflow:hidden}
+.tw .md.n2,.tw .md.n3,.tw .md.n4{grid-template-columns:1fr 1fr}
+.tw .md img{width:100%;height:100%;max-height:260px;object-fit:cover;display:block;background:var(--soft)}
+.tw .md.n1 img{object-fit:contain;max-height:320px}
+.tw .md .vid{position:relative}
+.tw .md .vid::after{content:"";position:absolute;inset:0;margin:auto;width:56px;height:56px;border-radius:50%;background:rgba(0,0,0,.55) url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="white" d="M8 5v14l11-7z"/></svg>') center/26px no-repeat}
+.tw .qt{border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-top:10px;font-size:14px}
+.tw .qt b{font-weight:600}
+.tw .qt .hd{display:inline}
+.tw .qt p{margin:4px 0 0;white-space:pre-wrap;overflow-wrap:anywhere}
+.tw .dt{color:var(--muted);font-size:13.5px;margin-top:10px}
+.tw .st{display:flex;gap:22px;border-top:1px solid var(--line);margin-top:10px;padding-top:8px;color:var(--muted);font-size:13.5px}
+.tw .st b{color:var(--ink);font-weight:600}
+.claims{display:flex;flex-direction:column;gap:12px;margin-top:14px}
+.claim{display:grid;grid-template-columns:22px minmax(0,1fr);gap:0 10px;align-items:start}
+.sq{width:14px;height:14px;border:1.5px solid var(--ink);margin-top:6px;border-radius:1px}
+.sq.f{background:var(--ink)}
+.claim p{margin:0;font-weight:500;font-size:16px;max-width:70ch}
+.sc{font-size:13px;color:var(--muted);margin-top:2px}
+.tb{max-width:560px;margin:10px 0 4px}
+.tb .trk{position:relative;height:10px;background:var(--soft);border-radius:5px;box-shadow:inset 0 0 0 1px var(--line)}
+.tb .fill{position:absolute;top:0;bottom:0;left:var(--l);width:var(--w);background:var(--good);border-radius:5px;opacity:.85}
+.tb .fill.f{background:var(--bad)}
+.tb .fill.u{background:var(--muted);opacity:.55}
+.tb .bnd{position:absolute;top:-5px;bottom:-5px;width:2px;background:var(--ink);left:var(--b);transform:translateX(-1px);border-radius:1px}
+.tb .bnd.t{left:var(--t)}
+.tb .dot{position:absolute;top:50%;width:16px;height:16px;border-radius:50%;background:var(--good);border:2.5px solid var(--paper);box-shadow:0 0 0 1.5px var(--good),0 1px 3px rgba(0,0,0,.25);transform:translate(-50%,-50%);left:var(--x)}
+.tb .dot.f{background:var(--bad);box-shadow:0 0 0 1.5px var(--bad),0 1px 3px rgba(0,0,0,.25)}
+.tb .dot.u{background:var(--muted);box-shadow:0 0 0 1.5px var(--muted),0 1px 3px rgba(0,0,0,.25)}
+.tb .lbl{position:relative;height:18px;margin-top:6px;font-size:10.5px;color:var(--muted)}
+.tb .lbl span{position:absolute;transform:translateX(-50%);line-height:1;top:4px}
+.tb .lbl span::before{content:"";position:absolute;left:50%;top:-6px;width:1px;height:4px;background:var(--line)}
+.tb .lbl span.bd{color:var(--ink);font-weight:600;top:3px}
+.tb .lbl span.bd::before{background:var(--ink);height:5px;top:-7px}
+.tb .ends{display:flex;justify-content:space-between;font-size:11px;letter-spacing:.04em;text-transform:uppercase;margin-top:2px}
+.tb .ends .n{color:var(--bad)}.tb .ends .y{color:var(--good)}.tb .ends .m{color:var(--muted)}
+.vl{font-size:13.5px;margin-top:4px;line-height:1.5}
+.vl b{font-weight:600}
+.vl .t{color:var(--good)}.vl .f{color:var(--bad)}.vl .u{color:var(--muted)}
+.vl .agree{color:var(--muted);font-size:12.5px}
+.vl .dis{color:var(--bad);font-size:12.5px;font-weight:500}
+.ptabs{display:flex;gap:4px;border-bottom:1px solid var(--line)}
+.ptabs button{font:inherit;font-size:13px;background:none;border:0;border-bottom:2px solid transparent;margin-bottom:-1px;padding:6px 10px;color:var(--muted);cursor:pointer}
+.ptabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--ink)}
+.pane{height:calc(100vh - 560px);min-height:220px;overflow-y:auto;padding-right:6px;font-size:13.5px;line-height:1.5}
+.pane .kv{display:grid;grid-template-columns:110px minmax(0,1fr);gap:4px 12px}
+.pane .kv dt{color:var(--muted)}.pane .kv dd{margin:0;overflow-wrap:anywhere}
+.pane .note{white-space:pre-wrap;overflow-wrap:anywhere}
+.pane .lbl{font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin:10px 0 4px}
+.pane .just{margin:6px 0 12px;padding:8px 10px;border-left:2px solid var(--line);font-size:13.5px}
+.pane .just .h{font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin-bottom:3px}
+.ev{display:flex;flex-direction:column;gap:6px;margin-top:4px}
+.ev .erow{display:grid;grid-template-columns:18px 22px minmax(0,1fr) 110px;gap:0 10px;align-items:baseline;font-size:13px}
+.ev .erow summary{display:contents;cursor:pointer}
+.ev .erow .d{color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ev .erow .d a{color:inherit;text-decoration:none;border-bottom:1px dotted var(--muted)}
+.ev .erow .w{color:var(--muted);text-align:right;white-space:nowrap}
+.ev .erow .g{font-weight:500;color:var(--ink)}
+.ev .body{grid-column:2/-1;margin:4px 0 8px;font-size:13px;color:var(--ink)}
+.ev .body blockquote{margin:0 0 4px;padding-left:10px;border-left:2px solid var(--line);color:var(--muted)}
+.ev .body .rs{margin-top:4px}
+.off{color:var(--muted)}
+details summary{list-style:none}
+details summary::-webkit-details-marker{display:none}
+/* list mode */
+.list{width:100%;border-collapse:collapse;font-size:13.5px}
+.list th{text-align:left;font-weight:500;font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);padding:6px 8px;border-bottom:1px solid var(--line)}
+.list td{padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+.list tr[data-i]{cursor:pointer}
+.list tr[data-i]:hover td{background:var(--soft)}
+.list .cl{white-space:nowrap;color:var(--muted);font-size:12.5px}
+.list .ch{white-space:nowrap}
+.list .ct{overflow-wrap:anywhere}
+.list .x{color:var(--muted);font-size:12px;margin-left:6px}
+.sc.f{color:var(--bad)}.sc.t{color:var(--good)}.sc.u{color:var(--muted)}
+button:focus-visible,summary:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.empty{color:var(--muted);padding:40px 0}
+@media (max-width:640px){.list .cl,.list .hs{display:none}}
+</style></head><body>
+
+<header>
+  <div class="bar">
+    <div class="top"><h1>Survey Vote Review</h1><div class="stats" id="stats"></div></div>
+    <div class="row" id="tabs"></div>
+    <div class="row"><span id="filters" class="row"></span><span class="sp"></span>
+      <button class="btn" id="mode"></button></div>
+  </div>
+</header>
+
+<main class="wrap"><div id="view"></div></main>
+
+<script>
+const DATA = /*__DATA__*/;
+const INLINE = /*__CHUNKS__*/null;
+const RV = DATA.meta.reviewers, NAME = {r1: "Reviewer 1", r2: "Reviewer 2", r3: "Reviewer 3"};
+const CELLS = [["all","All"],["left_false","Left, tool says false"],["left_unclear","Left, tool unclear"],["left_true","Left, tool says true"],
+               ["right_false","Right, tool says false"],["right_unclear","Right, tool unclear"],["right_true","Right, tool says true"],
+               ["neither_false","Unclear lean, false"],["neither_unclear","Unclear lean, tool unclear"],["neither_true","Unclear lean, true"]];
+const CELLSHORT = Object.fromEntries(CELLS.slice(1).map(([k]) => [k, k[0].toUpperCase() + " " + k.split("_")[1]]));
+const VCLS = {"false": "f", "unclear": "u", "true": ""};
+const nSel = p => RV.filter(w => (p.votes[w] || {}).v === "select").length;
+const has = (p, v) => RV.some(w => (p.votes[w] || {}).v === v);
+const FILTERS = [
+  ["none", "All voted", () => true, "every post with at least one vote"],
+  ["any", "Any select", p => nSel(p) >= 1, "at least one reviewer selected"],
+  ["two", "2+ selects", p => nSel(p) >= 2, "two or three reviewers selected"],
+  ["unan", "Unanimous select", p => { const vs = RV.map(w => (p.votes[w] || {}).v).filter(Boolean); return vs.length >= 2 && vs.every(v => v === "select"); }, "everyone who voted selected, at least two voted"],
+  ["dis", "Disagreement", p => has(p, "select") && has(p, "reject"), "at least one select and one reject"],
+  ["flag", "Flagged", p => has(p, "flag"), "at least one flag"],
+  ["comm", "Commented", p => RV.some(w => (p.votes[w] || {}).c), "at least one comment"]];
+const TOPIC = {immigration:"immigration",economy:"economy",foreign_affairs:"foreign affairs",society_and_culture:"society and culture",
+  elections_and_government:"elections and government",crime_and_justice:"crime and justice",health_and_science:"health and science",other_political:"other"};
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+let S = {cell: "all", filter: "none", mode: "card", idx: 0}, tab = "note";
+try { Object.assign(S, JSON.parse(localStorage.getItem("vr_state") || "{}")); } catch (e) {}
+const save = () => { try { localStorage.setItem("vr_state", JSON.stringify(S)); } catch (e) {} };
+
+const inCell = p => S.cell === "all" || p.cell === S.cell;
+const filt = () => FILTERS.find(f => f[0] === S.filter) || FILTERS[0];
+const queue = () => DATA.posts.filter(p => inCell(p) && filt()[2](p));
+
+let MEDIA = {}, EV = {};
+const loaded = {};
+if (INLINE) { MEDIA = INLINE.media; EV = INLINE.evidence; }
+function loadChunk(ci) {
+  if (INLINE || ci === undefined || loaded[ci]) return;
+  loaded[ci] = fetch(`chunk_${String(ci).padStart(2, "0")}.json`).then(r => r.json())
+    .then(j => { Object.assign(MEDIA, j.media); Object.assign(EV, j.evidence); if (S.mode === "card") render(); }).catch(() => {});
+}
+
+function chip(v, sm) { return v ? `<span class="vc ${v}${sm ? " sm" : ""}" title="${v}">${sm ? v[0].toUpperCase() : v}</span>` : `<span class="vc none${sm ? " sm" : ""}">&ndash;</span>`; }
+
+function header() {
+  const m = DATA.meta;
+  $("#stats").innerHTML = `<b>${m.n_posts}</b> posts reviewed${m.n_not_current ? ` (${m.n_not_current} not in current pool)` : ""}, selects ${RV.map(w => `${NAME[w]} <b>${m.selects[w]}</b>`).join(", ")}, selected by 2+ <b>${m.sel2}</b>, by all 3 <b>${m.sel3}</b>. Tool says false at ${m.boundary.toFixed(1)} or below, true at ${m.true_threshold >= 0 ? "+" : ""}${m.true_threshold.toFixed(1)} or above, unclear between`;
+  const cc = {}; DATA.posts.forEach(p => { cc[p.cell] = (cc[p.cell] || 0) + 1; }); cc.all = DATA.posts.length;
+  $("#tabs").innerHTML = CELLS.filter(([k]) => cc[k]).map(([k, l]) => `<button class="tab" data-cell="${k}" aria-pressed="${k === S.cell}">${l}<b>${cc[k]}</b></button>`).join("");
+  $("#filters").innerHTML = FILTERS.map(([k, l, f, t]) => `<button class="btn" data-filter="${k}" title="${t}" aria-pressed="${k === S.filter}">${l}<b>${DATA.posts.filter(p => inCell(p) && f(p)).length}</b></button>`).join("");
+  $("#mode").textContent = S.mode === "card" ? "List view" : "One at a time";
+}
+
+function bar(c) {
+  if (c.score === null) return "";
+  const lo = DATA.meta.score_min, hi = DATA.meta.score_max, bd = DATA.meta.boundary, tt = DATA.meta.true_threshold;
+  const pct = v => Math.max(0, Math.min(100, (v - lo) / (hi - lo) * 100)).toFixed(2) + "%";
+  // the fill runs from the dot to the cut that decides its band: the false boundary for false and unclear, the true threshold for true
+  const vc = VCLS[c.verdict], anchor = c.verdict === "true" ? tt : bd;
+  const p1 = (c.score - lo) / (hi - lo) * 100, p2 = (anchor - lo) / (hi - lo) * 100;
+  const l = Math.max(0, Math.min(p1, p2)).toFixed(2) + "%", w = Math.abs(p1 - p2).toFixed(2) + "%";
+  const ticks = [];
+  for (let t = Math.ceil(lo / 5) * 5; t <= hi; t += 5) if (Math.abs(t - bd) > 2.5 && Math.abs(t - tt) > 2.5) ticks.push(t);
+  const sg = v => `${v > 0 ? "+" : ""}${v.toFixed(1)}`;
+  return `<div class="tb">
+    <div class="trk" style="--b:${pct(bd)};--t:${pct(tt)};--x:${pct(c.score)};--l:${l};--w:${w}"><div class="fill ${vc}"></div><div class="bnd"></div><div class="bnd t"></div><div class="dot ${vc}"></div></div>
+    <div class="lbl mono">${ticks.map(t => `<span style="left:${pct(t)}">${t > 0 ? "+" : ""}${t}</span>`).join("")}<span class="bd" style="left:${pct(bd)}">false ${sg(bd)}</span><span class="bd" style="left:${pct(tt)}">true ${sg(tt)}</span></div>
+    <div class="ends"><span class="n">false</span><span class="m">unclear</span><span class="y">true</span></div></div>`;
+}
+const V = { "true": "t", "false": "f", "unclear": "u" };
+function verdictLines(c, lean) {
+  if (c.score === null) return `<div class="vl u">no score</div>`;
+  const tool = c.verdict;
+  let h = `<div class="vl">Tool says <b class="${V[tool]}">${tool}</b> <span class="mono u">(${c.score > 0 ? "+" : ""}${c.score.toFixed(1)})</span>`;
+  if (c.so) {
+    // tool unclear agrees only with reader unclear; against a reader verdict it neither agrees nor disagrees (board rule)
+    const a = tool === "unclear" ? (c.so.verdict === "unclear" ? ` <span class="agree">agrees</span>` : ` <span class="agree">(tool unclear)</span>`)
+      : c.so.verdict === "unclear" ? "" : c.so.verdict === tool ? ` <span class="agree">agrees</span>` : ` <span class="dis">disagrees</span>`;
+    h += `<br>Second reader says <b class="${V[c.so.verdict] || "u"}">${c.so.verdict}</b> <span class="u">(${c.so.confidence} confidence)</span>${a}`;
+  }
+  if (c.lean !== lean) h += `<br><span class="u">This claim leans ${c.lean}</span>`;
+  return h + `</div>`;
+}
+const DIR = {"5":"strongly supports","4":"supports","3":"mixed","X":"off topic","I":"no bearing","2":"contradicts","1":"strongly contradicts"};
+function evidenceHtml(p) {
+  return p.claims.map(c => {
+    const rows = EV[c.id];
+    if (!rows) return `<span class="off">loading evidence</span>`;
+    return `<div class="ev"><div class="sc mono" style="margin:0">${esc(c.text.slice(0, 90))}${c.text.length > 90 ? "&hellip;" : ""}</div>
+      ${c.so ? `<div class="just"><div class="h">Second reader, ${c.so.verdict}, ${c.so.confidence} confidence</div>${esc(c.so.justification)}</div>` : ""}
+      <div class="sc" style="margin:0">query, ${esc(c.query)}</div>
+      ${rows.length ? rows.map((r, i) => {
+        const read = r.status === "prepped" && r.dir;
+        const label = read ? DIR[r.dir] || r.dir : r.status === "origin-dropped" ? "the post itself, dropped" : r.status === "empty-doc" ? "no readable text" : "not read";
+        return `<details class="erow"><summary><span class="mono">${i + 1}</span><span class="g mono">${read ? r.dir : ""}</span><span class="d"><a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.domain || r.url)}</a>${r.date ? `<span class="off"> ${esc(r.date)}</span>` : ""}</span><span class="w ${read ? "" : "off"}">${label}</span></summary>
+          <div class="body">${r.cited.length ? r.cited.map(q => `<blockquote>${esc(q)}</blockquote>`).join("") : `<span class="off">no sentences cited</span>`}${r.reason ? `<div class="rs">${esc(r.reason)}</div>` : ""}</div></details>`;
+      }).join("") : `<span class="off">no sources retrieved</span>`}</div>`;
+  }).join("") + `<div class="sc" style="margin-top:8px">Verdict codes, 5 strongly supports, 4 supports, 3 mixed, X off topic, I no bearing, 2 contradicts, 1 strongly contradicts. Unread slots count as I.</div>`;
+}
+function paneHtml(p) {
+  if (tab === "note") {
+    const lab = p.note_class === "MISINFORMED_OR_POTENTIALLY_MISLEADING" ? "the note says the post is misleading" : p.note_class ? "the note says the post is not misleading" : "no note text";
+    const st = p.note_status === "CURRENTLY_RATED_HELPFUL" ? "rated helpful" : p.note_status === "CURRENTLY_RATED_NOT_HELPFUL" ? "rated not helpful" : "not yet rated";
+    return `<div class="lbl" style="margin-top:0">Community note, ${st}, ${lab}</div><div class="note">${esc(p.note || "no note text")}</div>`;
+  }
+  if (tab === "details") return `<dl class="kv">
+      <dt>Author</dt><dd>${esc(p.name)} (@${esc(p.handle)})${p.verified ? ", verified" : ""}</dd>
+      <dt>Author leans</dt><dd>${esc(p.author_lean)}</dd>
+      <dt>Claim leans</dt><dd>${p.claims.map(c => `${c.lean} (${c.lean_conf})`).join(", ")}</dd>
+      <dt>Country</dt><dd>${esc(p.country || "unknown")}</dd>
+      <dt>Subtopic</dt><dd>${TOPIC[p.subtopic] || esc(p.subtopic)}</dd>
+      <dt>Pool</dt><dd>${p.in_current ? "in the current US pool" : "not in current pool, from the 22 Sep pool"}</dd>
+      <dt>Evidence dated</dt><dd>${p.claims.map(c => c.evidence_month || "unknown").join(", ")}</dd>
+      <dt>Link</dt><dd><a class="mono" href="https://x.com/${esc(p.handle)}/status/${p.id}" target="_blank" rel="noopener">x.com/${esc(p.handle)}/status/${p.id}</a></dd>
+    </dl>`;
+  return evidenceHtml(p);
+}
+const VF = `<svg class="vf" viewBox="0 0 22 22" aria-label="verified"><path d="M20.4 11c0-1.2-.7-2.3-1.7-2.8.3-1.1 0-2.3-.8-3.1-.8-.8-2-1.1-3.1-.8C14.3 3.3 13.2 2.6 12 2.6s-2.3.7-2.8 1.7c-1.1-.3-2.3 0-3.1.8-.8.8-1.1 2-.8 3.1-1 .5-1.7 1.6-1.7 2.8s.7 2.3 1.7 2.8c-.3 1.1 0 2.3.8 3.1.8.8 2 1.1 3.1.8.5 1 1.6 1.7 2.8 1.7s2.3-.7 2.8-1.7c1.1.3 2.3 0 3.1-.8.8-.8 1.1-2 .8-3.1 1-.5 1.7-1.6 1.7-2.8zm-9.6 4.4-3.5-3.5 1.4-1.4 2.1 2.1 4.6-4.6 1.4 1.4-6 6z"/></svg>`;
+function card(p) {
+  const lean = p.cell.split("_")[0];
+  loadChunk(p.mc);
+  const md = MEDIA[p.id] || {}, imgs = md.media || [];
+  const media = imgs.length ? `<div class="md n${Math.min(imgs.length, 4)}">${imgs.slice(0, 4).map(m =>
+      m.type === "video" ? `<div class="vid"><img src="${m.src}" alt="video still"></div>` : `<img src="${m.src}" alt="">`).join("")}</div>`
+    : p.n_media ? `<div class="md n1" style="height:200px;background:var(--soft)"></div>`
+    : p.has_media ? `<div class="dt">This post carries media the fetch could not retrieve.</div>` : "";
+  const quoted = p.quoted ? `<div class="qt"><b>${esc(p.quoted.name)}</b> <span class="hd">@${esc(p.quoted.handle)}</span><p>${esc(p.quoted.text)}</p></div>` : "";
+  return `<article class="post" data-id="${p.id}">
+    <div>
+      <div class="meta">
+        <span class="chip">${CELLS.find(c => c[0] === p.cell)[1]}</span>
+        <span class="chip">${TOPIC[p.subtopic] || esc(p.subtopic)}</span>
+        ${p.in_current ? "" : `<span class="chip gone">not in current pool</span>`}
+        ${p.recycled ? `<span class="chip">recycled news</span>` : ""}
+      </div>
+      <div class="tw" style="margin-top:8px">
+        <div class="who">
+          ${md.avatar ? `<img class="av" src="${md.avatar}" alt="">` : `<div class="av"></div>`}
+          <div><div class="nm"><span>${esc(p.name)}</span>${p.verified ? VF : ""}</div><div class="hd">@${esc(p.handle)}</div></div>
+        </div>
+        <p class="text">${esc(p.text)}</p>
+        ${media}${quoted}
+        <div class="dt">${esc(p.date.replace("T", " "))}</div>
+        <div class="st"><span><b>${p.likes.toLocaleString()}</b> likes</span>${p.replies !== null ? `<span><b>${p.replies.toLocaleString()}</b> replies</span>` : ""}</div>
+      </div>
+      <div class="claims">${p.claims.map(c => `<div class="claim">
+        <div class="sq ${c.flag ? "f" : ""}"></div>
+        <div><p>${esc(c.text)}</p>${bar(c)}${verdictLines(c, lean)}</div></div>`).join("")}</div>
+    </div>
+    <div class="side">
+      <div class="votes"><div class="h">Votes</div>
+        ${RV.map(w => { const v = p.votes[w] || {}; return `<div class="vr"><span>${NAME[w]}</span><span>${chip(v.v)}</span><span class="c">${esc(v.c || "")}</span></div>`; }).join("")}
+      </div>
+      <div class="ptabs" role="tablist">
+        <button role="tab" data-tab="note" aria-selected="${tab === "note"}">Community note</button>
+        <button role="tab" data-tab="evidence" aria-selected="${tab === "evidence"}">Evidence</button>
+        <button role="tab" data-tab="details" aria-selected="${tab === "details"}">Details</button>
+      </div>
+      <div class="pane" id="pane">${paneHtml(p)}</div>
+    </div>
+  </article>`;
+}
+function listView(q) {
+  return `<table class="list"><thead><tr><th class="hs">Cell</th><th>Score</th><th>${RV.map(w => NAME[w][0]).join(" ")}</th><th>Claim</th></tr></thead><tbody>
+    ${q.map((p, i) => { const c = p.claims[0]; return `<tr data-i="${i}">
+      <td class="cl">${CELLSHORT[p.cell]}</td>
+      <td class="mono sc ${VCLS[c.verdict] || "t"}">${c.score === null ? "" : (c.score > 0 ? "+" : "") + c.score.toFixed(1)}</td>
+      <td class="ch">${RV.map(w => chip((p.votes[w] || {}).v, true)).join(" ")}</td>
+      <td class="ct">${esc(c.text)}${p.claims.length > 1 ? `<span class="x">+${p.claims.length - 1} more</span>` : ""}${p.in_current ? "" : `<span class="x">not in current pool</span>`}</td></tr>`; }).join("")}
+  </tbody></table>`;
+}
+function render() {
+  header();
+  const q = queue();
+  if (!q.length) { $("#view").innerHTML = `<p class="empty">No posts match this cell and filter.</p>`; return; }
+  if (S.mode === "list") { $("#view").innerHTML = listView(q); return; }
+  S.idx = Math.max(0, Math.min(S.idx, q.length - 1));
+  $("#view").innerHTML = `<div class="nav"><span class="pos mono">${S.idx + 1} of ${q.length}, most selects first then newest</span>
+      <button class="btn" id="prev" ${S.idx === 0 ? "disabled" : ""}>Previous</button>
+      <button class="btn" id="next" ${S.idx === q.length - 1 ? "disabled" : ""}>Next</button></div>${card(q[S.idx])}`;
+}
+function move(d) { S.idx += d; save(); render(); }
+
+document.addEventListener("click", e => {
+  const t = e.target.closest(".tab"); if (t) { S.cell = t.dataset.cell; S.idx = 0; save(); render(); return; }
+  const f = e.target.closest("[data-filter]"); if (f) { S.filter = f.dataset.filter; S.idx = 0; save(); render(); return; }
+  if (e.target.id === "mode") { S.mode = S.mode === "card" ? "list" : "card"; save(); render(); return; }
+  if (e.target.id === "prev") return move(-1);
+  if (e.target.id === "next") return move(1);
+  const r = e.target.closest("tr[data-i]"); if (r) { S.idx = +r.dataset.i; S.mode = "card"; save(); render(); window.scrollTo(0, 0); return; }
+  const pt = e.target.closest(".ptabs button"); if (pt) { tab = pt.dataset.tab; render(); }
+});
+document.addEventListener("keydown", e => {
+  if (S.mode !== "card" || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.key === "ArrowRight" && S.idx < queue().length - 1) move(1);
+  else if (e.key === "ArrowLeft" && S.idx > 0) move(-1);
+});
+render();
+</script>
+</body></html>

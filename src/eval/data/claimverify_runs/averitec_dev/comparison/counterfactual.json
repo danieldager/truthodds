@@ -1,0 +1,405 @@
+{
+ "generated_utc": "2026-09-07T19:12:29+00:00",
+ "gold": "eval/scripts/verification_grading/data/claims_dev_500_gold.parquet",
+ "n_gold_rows": 500,
+ "bootstrap": {
+  "reps": 1000,
+  "seed": 0,
+  "unit": "gold row",
+  "interval": "percentile 95%"
+ },
+ "counterfactual": "CF-A, no corroboration bar, the model's last proposed non-open status stands",
+ "arms": {
+  "top3": {
+   "dir": "eval/data/claimverify_runs/averitec_dev/top3",
+   "n_claims": 491,
+   "n_flipped_by_cf_a": 114,
+   "cf_a_flips": {
+    "unsupported -> refuted": 64,
+    "unsupported -> supported": 47,
+    "unsupported -> conflicting": 1,
+    "conflicting -> supported": 1,
+    "conflicting -> refuted": 1
+   },
+   "actual": {
+    "n_rows": 500,
+    "n_rows_missing": 0,
+    "four_class_convention": {
+     "value": 0.716,
+     "ci": [
+      0.67595,
+      0.752
+     ],
+     "n": 500
+    },
+    "binary_A": {
+     "accuracy": {
+      "value": 0.854,
+      "ci": [
+       0.824,
+       0.88205
+      ],
+      "n": 500
+     },
+     "flag_recall": {
+      "value": 0.9603174603174603,
+      "ci": [
+       0.940379403794038,
+       0.9768284650630011
+      ],
+      "n": 378
+     },
+     "fpr": {
+      "value": 0.47540983606557374,
+      "ci": [
+       0.3884877222189191,
+       0.5613076512929885
+      ],
+      "n": 122
+     },
+     "precision": {
+      "value": 0.8622327790973872,
+      "ci": [
+       0.8286986714975846,
+       0.8950005385518058
+      ],
+      "n": 421
+     }
+    }
+   },
+   "cf_a_no_bar": {
+    "n_rows": 500,
+    "n_rows_missing": 0,
+    "four_class_convention": {
+     "value": 0.752,
+     "ci": [
+      0.714,
+      0.788
+     ],
+     "n": 500
+    },
+    "binary_A": {
+     "accuracy": {
+      "value": 0.866,
+      "ci": [
+       0.836,
+       0.894
+      ],
+      "n": 500
+     },
+     "flag_recall": {
+      "value": 0.9021164021164021,
+      "ci": [
+       0.8723930027173914,
+       0.930325204744941
+      ],
+      "n": 378
+     },
+     "fpr": {
+      "value": 0.2459016393442623,
+      "ci": [
+       0.1709349593495935,
+       0.33028106048826
+      ],
+      "n": 122
+     },
+     "precision": {
+      "value": 0.9191374663072777,
+      "ci": [
+       0.8891891891891892,
+       0.9441344496612385
+      ],
+      "n": 371
+     }
+    }
+   },
+   "unsupported_anatomy": {
+    "n_unsupported": 253,
+    "n_claims": 491,
+    "bar_refusal": 143,
+    "retrieval_miss": 67,
+    "other": 43,
+    "shares": {
+     "bar_refusal": 0.5652173913043478,
+     "retrieval_miss": 0.2648221343873518,
+     "other": 0.16996047430830039
+    },
+    "definitions": {
+     "bar_refusal": "the RESOLVE model proposed a close and the code bar refused it",
+     "retrieval_miss": "no full-read supporting or refuting evidence was ever read",
+     "other": "read stance evidence, no refusal, the loop still ended open"
+    }
+   },
+   "leak": {
+    "stance_docs": 1265,
+    "post_claim": 94,
+    "undated": 303,
+    "fact_check_host": 149,
+    "post_claim_share": 0.07430830039525692,
+    "undated_share": 0.23952569169960475,
+    "fact_check_share": 0.11778656126482213,
+    "unit": "distinct stance-bearing full-read documents"
+   }
+  },
+  "all10": {
+   "dir": "eval/data/claimverify_runs/averitec_dev/all10",
+   "n_claims": 491,
+   "n_flipped_by_cf_a": 84,
+   "cf_a_flips": {
+    "unsupported -> refuted": 52,
+    "unsupported -> supported": 30,
+    "conflicting -> supported": 1,
+    "conflicting -> refuted": 1
+   },
+   "actual": {
+    "n_rows": 500,
+    "n_rows_missing": 0,
+    "four_class_convention": {
+     "value": 0.72,
+     "ci": [
+      0.682,
+      0.758
+     ],
+     "n": 500
+    },
+    "binary_A": {
+     "accuracy": {
+      "value": 0.872,
+      "ci": [
+       0.844,
+       0.9
+      ],
+      "n": 500
+     },
+     "flag_recall": {
+      "value": 0.955026455026455,
+      "ci": [
+       0.9336924493554327,
+       0.9757444917367017
+      ],
+      "n": 378
+     },
+     "fpr": {
+      "value": 0.38524590163934425,
+      "ci": [
+       0.30172071702244113,
+       0.46827838827838825
+      ],
+      "n": 122
+     },
+     "precision": {
+      "value": 0.8848039215686274,
+      "ci": [
+       0.8553921568627451,
+       0.9152130267551459
+      ],
+      "n": 408
+     }
+    }
+   },
+   "cf_a_no_bar": {
+    "n_rows": 500,
+    "n_rows_missing": 0,
+    "four_class_convention": {
+     "value": 0.752,
+     "ci": [
+      0.714,
+      0.79
+     ],
+     "n": 500
+    },
+    "binary_A": {
+     "accuracy": {
+      "value": 0.892,
+      "ci": [
+       0.864,
+       0.918
+      ],
+      "n": 500
+     },
+     "flag_recall": {
+      "value": 0.9259259259259259,
+      "ci": [
+       0.8981164778460031,
+       0.9518748663101605
+      ],
+      "n": 378
+     },
+     "fpr": {
+      "value": 0.21311475409836064,
+      "ci": [
+       0.14403753026634383,
+       0.2880429906542055
+      ],
+      "n": 122
+     },
+     "precision": {
+      "value": 0.9308510638297872,
+      "ci": [
+       0.9051190476190476,
+       0.9545454545454546
+      ],
+      "n": 376
+     }
+    }
+   },
+   "unsupported_anatomy": {
+    "n_unsupported": 203,
+    "n_claims": 491,
+    "bar_refusal": 107,
+    "retrieval_miss": 52,
+    "other": 44,
+    "shares": {
+     "bar_refusal": 0.5270935960591133,
+     "retrieval_miss": 0.2561576354679803,
+     "other": 0.21674876847290642
+    },
+    "definitions": {
+     "bar_refusal": "the RESOLVE model proposed a close and the code bar refused it",
+     "retrieval_miss": "no full-read supporting or refuting evidence was ever read",
+     "other": "read stance evidence, no refusal, the loop still ended open"
+    }
+   },
+   "leak": {
+    "stance_docs": 2288,
+    "post_claim": 209,
+    "undated": 386,
+    "fact_check_host": 271,
+    "post_claim_share": 0.09134615384615384,
+    "undated_share": 0.1687062937062937,
+    "fact_check_share": 0.11844405594405595,
+    "unit": "distinct stance-bearing full-read documents"
+   }
+  },
+  "noceil": {
+   "dir": "eval/data/claimverify_runs/averitec_dev/top3_noceil",
+   "n_claims": 491,
+   "n_flipped_by_cf_a": 68,
+   "cf_a_flips": {
+    "unsupported -> refuted": 39,
+    "unsupported -> supported": 25,
+    "conflicting -> refuted": 4
+   },
+   "actual": {
+    "n_rows": 500,
+    "n_rows_missing": 0,
+    "four_class_convention": {
+     "value": 0.744,
+     "ci": [
+      0.706,
+      0.782
+     ],
+     "n": 500
+    },
+    "binary_A": {
+     "accuracy": {
+      "value": 0.866,
+      "ci": [
+       0.836,
+       0.896
+      ],
+      "n": 500
+     },
+     "flag_recall": {
+      "value": 0.9365079365079365,
+      "ci": [
+       0.9126958624066593,
+       0.9604247673934175
+      ],
+      "n": 378
+     },
+     "fpr": {
+      "value": 0.3524590163934426,
+      "ci": [
+       0.2654783454009118,
+       0.4394090909090909
+      ],
+      "n": 122
+     },
+     "precision": {
+      "value": 0.8916876574307305,
+      "ci": [
+       0.8610964912280702,
+       0.9209183673469388
+      ],
+      "n": 397
+     }
+    }
+   },
+   "cf_a_no_bar": {
+    "n_rows": 500,
+    "n_rows_missing": 0,
+    "four_class_convention": {
+     "value": 0.758,
+     "ci": [
+      0.72,
+      0.794
+     ],
+     "n": 500
+    },
+    "binary_A": {
+     "accuracy": {
+      "value": 0.86,
+      "ci": [
+       0.828,
+       0.892
+      ],
+      "n": 500
+     },
+     "flag_recall": {
+      "value": 0.8994708994708994,
+      "ci": [
+       0.868766404199475,
+       0.9301737170995796
+      ],
+      "n": 378
+     },
+     "fpr": {
+      "value": 0.26229508196721313,
+      "ci": [
+       0.18699186991869918,
+       0.35296118447378955
+      ],
+      "n": 122
+     },
+     "precision": {
+      "value": 0.9139784946236559,
+      "ci": [
+       0.8833244680851063,
+       0.9408681214421253
+      ],
+      "n": 372
+     }
+    }
+   },
+   "unsupported_anatomy": {
+    "n_unsupported": 131,
+    "n_claims": 491,
+    "bar_refusal": 78,
+    "retrieval_miss": 20,
+    "other": 33,
+    "shares": {
+     "bar_refusal": 0.5954198473282443,
+     "retrieval_miss": 0.15267175572519084,
+     "other": 0.25190839694656486
+    },
+    "definitions": {
+     "bar_refusal": "the RESOLVE model proposed a close and the code bar refused it",
+     "retrieval_miss": "no full-read supporting or refuting evidence was ever read",
+     "other": "read stance evidence, no refusal, the loop still ended open"
+    }
+   },
+   "leak": {
+    "stance_docs": 1464,
+    "post_claim": 699,
+    "undated": 330,
+    "fact_check_host": 348,
+    "post_claim_share": 0.4774590163934426,
+    "undated_share": 0.22540983606557377,
+    "fact_check_share": 0.23770491803278687,
+    "unit": "distinct stance-bearing full-read documents"
+   }
+  }
+ },
+ "arms_missing": []
+}

@@ -1,0 +1,31 @@
+WARNING: join produced 3 rows from 253 claims — non-unique claim_id (claims unique=253). Scores below are unreliable; regenerate claims with unique ids.
+
+claims: claims_demo.parquet   verdicts: verdicts_demo.parquet
+joined=3  scored=3  errors=0
+
+======================================================
+4-CLASS ACCURACY: 1.000  (3/3)
+majority baseline (REF): 1.000
+======================================================
+
+class         P      R     F1  support
+SUP       0.000  0.000  0.000        0
+REF       1.000  1.000  1.000        3
+NEI       0.000  0.000  0.000        0
+CE        0.000  0.000  0.000        0
+
+macro-F1: 0.250
+
+confusion (gold \ pred):
+           SUP   REF   NEI    CE
+SUP          0     0     0     0
+REF          0     3     0     0
+NEI          0     0     0     0
+CE           0     0     0     0
+
+loop: avg rounds=1.33  avg llm_calls=8.3  avg elapsed=9.3s
+stops: confident=3
+
+CASCADE: escalated past first provider on 0/3 claims (0%)
+resolving provider (who got it confident) + accuracy when they resolved:
+  serper  : resolved   3 (100%)   acc 3/3=1.00

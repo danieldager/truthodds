@@ -1,0 +1,201 @@
+run_id,claim_idx,source,gold,post_verdict,correct,post_confidence
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,1,Facebook,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,2,South Africa’s Mail & Guardian,Supported,Supported,True,0.6
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,3,"ABP News, Times of India, Hindustan Times, Sakaal Times, Amar Ujala, Pinkvilla",Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,4,Facebook,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,5,Channels Television,Supported,Conflicting Evidence,False,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,6,Twitter,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,7,,Refuted,Supported,False,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,8,WhatsApp,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,9,Facebook,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,10,,Supported,Supported,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,11,Twitter,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,12,Youtube,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,13,,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,14,US televised debate on Reuters,Supported,Supported,True,0.6
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,15,Twitter,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,16,Facebook,Not Enough Evidence,Refuted,False,0.8
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,17,Twitter,Refuted,Not Enough Evidence,False,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,18,Twitter,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,19,Facebook,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,20,Authority Newspaper,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,21,Public forum,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,22,Twitter,Refuted,Not Enough Evidence,False,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,23,Sahel Standard,Supported,Supported,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,24,Facebook,Refuted,Not Enough Evidence,False,0.8
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,25, Facebook ,Refuted,Refuted,True,0.8
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,26,Final Presedential Debate,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,27,CBC News,Refuted,Not Enough Evidence,False,0.8
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,28,facebook,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,29,Facebook,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,30,Facebook,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,31,Twitter,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,32,Rev,Supported,Refuted,False,0.8
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,33,Twitter,Refuted,Not Enough Evidence,False,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,34,Facebook,Supported,Supported,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,35,WhatsApp,Supported,Supported,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,36,Facebook,Supported,Supported,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,37,Twitter,Supported,Conflicting Evidence,False,0.8
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,38,Twitter,Conflicting Evidence/Cherrypicking,Not Enough Evidence,False,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,39,Sudarshan News,Refuted,Not Enough Evidence,False,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,40,Facebook,Refuted,Refuted,True,0.8
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,41,Twitter,Not Enough Evidence,Not Enough Evidence,True,0.8
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,42,Facebook,Conflicting Evidence/Cherrypicking,Refuted,False,0.8
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,43,Facebook,Refuted,Not Enough Evidence,False,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,44,Slate,Not Enough Evidence,Not Enough Evidence,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,45,Twitter,Supported,Not Enough Evidence,False,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,46,Twitter,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,47,"Facebook, Twitter",Supported,Supported,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,48,Channels Television,Supported,Supported,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,49,,Supported,Refuted,False,0.8
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,50,Twitter,Refuted,Not Enough Evidence,False,0.8
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,51,Debbie Mucarsel-Powell media centre,Supported,Not Enough Evidence,False,0.9
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,52,Instagram,Supported,Not Enough Evidence,False,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,53,Facebook,Not Enough Evidence,Not Enough Evidence,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,54,,Supported,Not Enough Evidence,False,0.8
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,55,Twitter,Refuted,Not Enough Evidence,False,0.8
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,56,Facebook,Refuted,Not Enough Evidence,False,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,57,Republic World,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,58,Facebook,Supported,Refuted,False,0.8
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,59,Twitter,Supported,Supported,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,60,Facebook,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,61, Hub Pages,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,62,,Supported,Not Enough Evidence,False,0.9
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,63,"Speech, Republican National Convention",Conflicting Evidence/Cherrypicking,Refuted,False,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,64,Sudarshan News,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,65,Facebook,Supported,Supported,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,66,ChannelsTV,Supported,Conflicting Evidence,False,0.8
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,67,Facebook,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,68,,Refuted,Not Enough Evidence,False,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,69,Republican National Convention,Refuted,Not Enough Evidence,False,0.8666666666666667
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,70,,Supported,Not Enough Evidence,False,0.9
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,71,Twitter,Supported,Supported,True,0.8
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,72,Facebook,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,73,facebook User Post.,Refuted,Not Enough Evidence,False,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,74,Facebook,Refuted,Not Enough Evidence,False,0.9333333333333332
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,75,Democratic presidential candidate Hillary Clinton campaign website.,Conflicting Evidence/Cherrypicking,Supported,False,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,76,Fox News,Supported,Conflicting Evidence,False,0.8
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,77,Facebook,Refuted,Not Enough Evidence,False,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,78,Twitter,Supported,Supported,True,0.8
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,79,Twitter ,Refuted,Not Enough Evidence,False,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,80,Facebook,Conflicting Evidence/Cherrypicking,Not Enough Evidence,False,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,81,New York Post,Supported,Supported,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,82,,Refuted,Not Enough Evidence,False,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,83,Twitter,Supported,Supported,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,84,Facebook,Supported,Refuted,False,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,85,Facebook,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,86,Twitter,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,87,Twitter,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,88,Facebook,Refuted,Refuted,True,0.8
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,89,Facebook,Refuted,Not Enough Evidence,False,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,90,Channels TV,Not Enough Evidence,Not Enough Evidence,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,91,Facebook,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,92,Facebook,Refuted,Refuted,True,0.8
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,93,Radio Canada,Supported,Supported,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,94,Facebook,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,95,FACEBOOK,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,96,,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,97,,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,98,Facebook ,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,99,US televised debate on Reuters,Refuted,Conflicting Evidence,False,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,100,,Supported,Supported,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,101,,Supported,Supported,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,102,Twitter,Refuted,Conflicting Evidence,False,0.8
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,103,Twitter,Refuted,Not Enough Evidence,False,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,104,Twitter,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,105,Facebook,Conflicting Evidence/Cherrypicking,Not Enough Evidence,False,0.9
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,106,Facebook,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,107,Twitter,Supported,Supported,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,108,Facebook,Refuted,Not Enough Evidence,False,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,109,US televised debate on Reuters,Supported,Supported,True,0.8
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,110,Social Media,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,111,,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,112,,Supported,Supported,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,113,Republican National Convention,Not Enough Evidence,Not Enough Evidence,True,0.8
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,114,,Refuted,Not Enough Evidence,False,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,115,Rev,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,116,Facebook,Supported,Supported,True,0.8
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,117,US televised debate on Reuters.,Conflicting Evidence/Cherrypicking,Refuted,False,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,118,Facebook,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,119,Blog,Refuted,Not Enough Evidence,False,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,120,Facebook,Refuted,Not Enough Evidence,False,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,121,The Federalist,Refuted,Refuted,True,0.8
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,122,WECT TV6,Conflicting Evidence/Cherrypicking,Not Enough Evidence,False,0.8
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,123,Facebook,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,124,Facebook,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,125,Facebook,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,126,Youtube,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,127,Facebook,Refuted,Not Enough Evidence,False,0.9
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,128,,Supported,Not Enough Evidence,False,0.9
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,129,Facebook,Supported,Refuted,False,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,130,Facebook User posts,Not Enough Evidence,Refuted,False,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,131,,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,132,Twitter,Refuted,Not Enough Evidence,False,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,133,Facebook,Refuted,Not Enough Evidence,False,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,134,,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,135,Facebook,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,136,Lifesite.com,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,137,Malcolm Kendrick,Refuted,Not Enough Evidence,False,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,138,Facebook,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,139,Social Media,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,140,Facebook,Supported,Supported,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,141,Facebook,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,142,Facebook,Supported,Refuted,False,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,143,Sudarshan News,Refuted,Not Enough Evidence,False,0.8
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,144,Facebook,Supported,Supported,True,0.8
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,145,ChannelsTV,Supported,Supported,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,146,Facebook,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,147,Facebook,Supported,Supported,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,148,Facebook,Refuted,Not Enough Evidence,False,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,149,Facebook ,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,150,Facebook,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,151,,Not Enough Evidence,Not Enough Evidence,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,152,Twitter,Supported,Supported,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,153,Facebook,Supported,Supported,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,154,Facebook,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,155,Twitter,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,156,facebook,Not Enough Evidence,Refuted,False,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,157,Facebook,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,158,,Supported,Not Enough Evidence,False,0.8
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,159,Facebook,Refuted,Refuted,True,0.8
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,160,Facebook,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,161,Facebook,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,162,,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,163,,Refuted,Not Enough Evidence,False,0.7
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,164,,Supported,Not Enough Evidence,False,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,165,,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,166,Facebook,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,167,Facebook,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,168,,Supported,Not Enough Evidence,False,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,169,Facebook,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,170,,Supported,Supported,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,171,Twitter,Refuted,Refuted,True,0.8
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,172,Facebook,Conflicting Evidence/Cherrypicking,Refuted,False,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,173,Facebook,Refuted,Not Enough Evidence,False,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,174,Facebook,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,175,,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,176,Twitter,Supported,Supported,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,177,Facebook,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,178,,Not Enough Evidence,Refuted,False,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,179,Instagram,Refuted,Supported,False,0.8
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,180,The Federalist,Supported,Supported,True,0.8
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,181,Twitter,Refuted,Not Enough Evidence,False,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,182,Facebook,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,183,Facebook,Supported,Not Enough Evidence,False,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,184,,Refuted,Not Checkable,False,0.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,185,Facebook,Refuted,Not Enough Evidence,False,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,186,Toronto today,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,187,Mehr News Agency,Conflicting Evidence/Cherrypicking,Not Enough Evidence,False,0.8
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,188,Facebook,Refuted,Refuted,True,0.8
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,189,Twitter - Times Now,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,190,Facebook,Conflicting Evidence/Cherrypicking,Refuted,False,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,191,The Federalist,Conflicting Evidence/Cherrypicking,Refuted,False,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,192,Facebook,Refuted,Supported,False,0.8
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,193,Instagram,Refuted,Not Enough Evidence,False,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,194,"transmitted via Facebook and Zoom, University of Ibadan, Nigeria's UI Community Forum's Voice of Next Vice-Chancellor 2020",Supported,Supported,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,195,Facebook,Refuted,Not Enough Evidence,False,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,196,,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,197,,Refuted,Refuted,True,0.8
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,198,Twitter,Supported,Supported,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,199,Press,Refuted,Refuted,True,1.0
+sc_200_0_llama-3.3-70b-versatile_20260511_094727,200,Independence Anniversary Speech,Supported,Supported,True,0.8

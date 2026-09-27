@@ -1,0 +1,58 @@
+{
+ "posts_in": 10500,
+ "posts_with_claim": 6467,
+ "posts_with_checkworthy": 5033,
+ "posts_reaching_verify": 3969,
+ "target_recovered": 4761,
+ "target_recovered_checkworthy": 3394,
+ "target_recovered_eligible": 2622,
+ "loss": {
+  "extraction_produced_nothing": 4033,
+  "claims_but_none_eligible": 2498,
+  "extracted_but_target_not_found": 1706
+ },
+ "miss_kind": {
+  "implicit_framing": 1701,
+  "other": 176,
+  "extraction_miss": 3205,
+  "media_content": 656,
+  "null": 1
+ },
+ "no_claim_reason": {
+  "artifact": 2082,
+  "opinion": 1662,
+  "unresolved": 88,
+  "promo": 190,
+  "missed-claims": 11
+ },
+ "ci": {
+  "posts_in": [
+   0.9996342671427948,
+   1.0
+  ],
+  "posts_with_claim": [
+   0.6065606628745324,
+   0.6251640805755212
+  ],
+  "posts_with_checkworthy": [
+   0.46978698879503267,
+   0.48889479482973197
+  ],
+  "posts_reaching_verify": [
+   0.36877145180811455,
+   0.3873177870090436
+  ],
+  "target_recovered": [
+   0.44392508591076885,
+   0.4629661223496452
+  ],
+  "target_recovered_checkworthy": [
+   0.31435790334236957,
+   0.3322475824067682
+  ],
+  "target_recovered_eligible": [
+   0.2415274774251538,
+   0.25808416942222445
+  ]
+ }
+}

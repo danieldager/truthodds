@@ -1,0 +1,55 @@
+{
+  "stem": "weights_replicate_ci_3voice",
+  "eps_headline": 0.1,
+  "order": [
+    "n_t",
+    "n_f",
+    "n_e"
+  ],
+  "gold_fit": {
+    "source": "eval/data/urn_runs/e1_ctx/headline_metrics_clustered.json",
+    "population": "fc_gold",
+    "weights": {
+      "n_t": 2.1866709971081666,
+      "n_f": -1.8400671379358873,
+      "n_e": -0.1250763102875521
+    },
+    "weights_ci95_cluster": {
+      "n_t": [
+        2.0346986279106054,
+        2.3444003871533416
+      ],
+      "n_f": [
+        -1.9940907616005643,
+        -1.6901412614644737
+      ],
+      "n_e": [
+        -0.1563334783466018,
+        -0.09495870113018866
+      ]
+    }
+  },
+  "two_urn_fit": {
+    "source": "eval/data/urn_runs/true_timeline/two_urn_fit_clustered.json",
+    "population": "cn_false + x_feed",
+    "weights": {
+      "n_t": 1.0688060870029479,
+      "n_f": -1.1684602677485527,
+      "n_e": -0.1625311943560416
+    },
+    "weights_ci95_cluster": {
+      "n_t": [
+        0.9587265134725668,
+        1.1779437295194395
+      ],
+      "n_f": [
+        -1.3293211747828435,
+        -1.0204933463278443
+      ],
+      "n_e": [
+        -0.2143528467812107,
+        -0.11140720470415992
+      ]
+    }
+  }
+}

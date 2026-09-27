@@ -1,0 +1,96 @@
+{
+  "data": {
+    "search_by_raw_query": {
+      "search_timeline": {
+        "timeline": {
+          "instructions": [
+            {
+              "type": "TimelineAddEntries",
+              "entries": [
+                {
+                  "entryId": "tweet-3001",
+                  "content": {
+                    "entryType": "TimelineTimelineItem",
+                    "itemContent": {
+                      "itemType": "TimelineTweet",
+                      "tweet_results": {
+                        "result": {
+                          "__typename": "Tweet",
+                          "rest_id": "3001",
+                          "core": {
+                            "user_results": {
+                              "result": {
+                                "__typename": "User",
+                                "rest_id": "701",
+                                "legacy": { "screen_name": "grace", "name": "Grace" }
+                              }
+                            }
+                          },
+                          "legacy": {
+                            "id_str": "3001",
+                            "full_text": "A normal search-result tweet about #elections",
+                            "created_at": "Fri Mar 14 12:00:00 +0000 2025",
+                            "lang": "en",
+                            "conversation_id_str": "3001"
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                {
+                  "entryId": "tweet-3002",
+                  "content": {
+                    "entryType": "TimelineTimelineItem",
+                    "itemContent": {
+                      "itemType": "TimelineTweet",
+                      "tweet_results": {
+                        "result": {
+                          "__typename": "TweetTombstone",
+                          "tombstone": {
+                            "__typename": "TextTombstone",
+                            "text": { "text": "This Post is unavailable." }
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                {
+                  "entryId": "tweet-3003",
+                  "content": {
+                    "entryType": "TimelineTimelineItem",
+                    "itemContent": {
+                      "itemType": "TimelineTweet",
+                      "tweet_results": {
+                        "result": {
+                          "rest_id": "3003",
+                          "core": {
+                            "user_results": {
+                              "result": {
+                                "__typename": "User",
+                                "rest_id": "703",
+                                "legacy": { "screen_name": "heidi", "name": "Heidi" }
+                              }
+                            }
+                          },
+                          "legacy": {
+                            "id_str": "3003",
+                            "full_text": "Tweet object with rest_id but no __typename field — still captured.",
+                            "created_at": "Fri Mar 14 13:00:00 +0000 2025",
+                            "lang": "en",
+                            "conversation_id_str": "3003"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  }
+}

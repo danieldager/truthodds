@@ -1,0 +1,226 @@
+<title>Pre-Scorer Coverage</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400&family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Serif:wght@600&display=swap">
+<style>
+:root{
+  --ground:#fbfaf8; --panel:#fff; --ink:#16161a; --mut:#6f6f79; --line:#e4e2dd;
+  --keep:#23232a; --lost:#d6d3cc; --flag:#8c3a34; --flagbg:#8c3a341a;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){
+  --ground:#131315; --panel:#191920; --ink:#eceae6; --mut:#97959e; --line:#2c2c33;
+  --keep:#eceae6; --lost:#3a3a42; --flag:#d98a80; --flagbg:#d98a8018;
+}}
+:root[data-theme=dark]{
+  --ground:#131315; --panel:#191920; --ink:#eceae6; --mut:#97959e; --line:#2c2c33;
+  --keep:#eceae6; --lost:#3a3a42; --flag:#d98a80; --flagbg:#d98a8018;
+}
+*{box-sizing:border-box}
+body{
+  margin:0; padding:4rem 1.5rem 7rem; background:var(--ground); color:var(--ink);
+  font-family:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,sans-serif;
+  font-size:15.5px; line-height:1.65; -webkit-font-smoothing:antialiased;
+}
+main{max-width:64rem; margin:0 auto; display:flex; flex-direction:column; gap:0}
+h1{
+  font-family:"IBM Plex Serif",Georgia,serif; font-weight:600; font-size:2.1rem;
+  letter-spacing:-.015em; margin:0 0 .4rem; text-wrap:balance;
+}
+h2{
+  font-family:"IBM Plex Serif",Georgia,serif; font-weight:600; font-size:1.15rem;
+  margin:3.4rem 0 .2rem; text-wrap:balance;
+}
+.eyebrow{
+  font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:.72rem;
+  letter-spacing:.14em; text-transform:uppercase; color:var(--mut); margin:0 0 .5rem;
+}
+.deck{color:var(--mut); margin:0 0 3rem; max-width:46rem}
+p{margin:.9rem 0}
+.note{color:var(--mut); font-size:.93rem; max-width:52rem}
+code{font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:.86em;
+  background:var(--panel); border:1px solid var(--line); border-radius:3px; padding:.05em .35em}
+
+/* headline figure */
+.figure{
+  border-top:2px solid var(--ink); border-bottom:1px solid var(--line);
+  padding:1.4rem 0 1.6rem; margin:0 0 .4rem;
+  display:grid; grid-template-columns:auto 1fr; gap:0 2.2rem; align-items:baseline;
+}
+.figure .big{
+  font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:4.2rem; font-weight:300;
+  letter-spacing:-.04em; line-height:1;
+}
+.figure .cap{align-self:center}
+.figure .cap b{display:block; font-weight:600; margin-bottom:.15rem}
+
+/* funnel */
+.funnel{display:flex; flex-direction:column; gap:.15rem; margin:1.3rem 0 .4rem}
+.row{
+  display:grid; grid-template-columns:17rem 1fr 4.5rem 4rem 6.5rem; gap:.9rem;
+  align-items:center; padding:.3rem 0;
+}
+.track{height:1.15rem; display:flex; border-radius:2px; overflow:hidden; background:var(--lost)}
+.seg{height:100%; background:var(--keep)}
+.n,.pct,.ci{font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-variant-numeric:tabular-nums; text-align:right}
+.n{font-size:.9rem}
+.pct{font-weight:600; font-size:.95rem}
+.ci{color:var(--mut); font-size:.78rem}
+.rule{border:0; border-top:1px solid var(--line); margin:1.6rem 0 0}
+
+/* tables */
+.wrap{overflow-x:auto; margin:1rem 0 0}
+table{border-collapse:collapse; width:100%; font-size:.94rem}
+th,td{text-align:left; padding:.5rem .7rem; border-bottom:1px solid var(--line)}
+th{
+  font-family:"IBM Plex Mono",ui-monospace,monospace; font-weight:400; font-size:.7rem;
+  letter-spacing:.1em; text-transform:uppercase; color:var(--mut);
+  border-bottom:1px solid var(--ink);
+}
+td.n,th.n{text-align:right; font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-variant-numeric:tabular-nums}
+td.sub{color:var(--mut); font-size:.88rem}
+tr.total td{border-top:1px solid var(--ink); border-bottom:0; font-weight:600}
+tr.miss td:first-child{box-shadow:inset 3px 0 0 var(--flag)}
+td.minibar{width:32%}
+td.minibar span{display:block; height:.6rem; background:var(--keep); border-radius:1px}
+tr.miss{background:var(--flagbg)}
+.tag{
+  font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:.68rem;
+  letter-spacing:.08em; text-transform:uppercase; color:var(--mut);
+}
+.tag.f{color:var(--flag)}
+@media (max-width:760px){
+  .row{grid-template-columns:1fr 4.5rem 4rem}
+  .track,.ci{display:none}
+  .figure{grid-template-columns:1fr; gap:.6rem}
+  .figure .big{font-size:3.2rem}
+}
+</style>
+<main>
+<p class="eyebrow">Measurement &middot; 28 August 2026</p>
+<h1>What never reaches the scorer</h1>
+<p class="deck">Every recall number we publish is computed over claims that survived to
+scoring. A claim we never extracted is a miss the evaluation cannot see. This measures that
+hole against a post-level denominator: 10,500 community-noted posts, where a claim exists by
+construction because a human wrote a note about it.</p>
+
+<div class="figure">
+  <div class="big">25%</div>
+  <div class="cap"><b>of noted posts arrive at the scorer with the noted claim intact</b>
+  <span class="note">The claim the note was about, extracted, judged checkworthy, and inside
+  the verification scope. The other three quarters are invisible to every recall figure we
+  report.</span></div>
+</div>
+
+<h2>Post-level funnel</h2>
+<p class="note">Filled bar is what survives; the remainder is loss. Intervals are Wilson,
+95%.</p>
+<div class="funnel">
+<div class="row"><div>noted posts in</div><div class="track"><div class="seg" style="width:100.00%"></div></div><div class="n">10,500</div><div class="pct">100.0%</div><div class="ci">100.0&ndash;100.0</div></div>
+<div class="row"><div>yielded &ge;1 claim</div><div class="track"><div class="seg" style="width:61.59%"></div></div><div class="n">6,467</div><div class="pct">61.6%</div><div class="ci">60.7&ndash;62.5</div></div>
+<div class="row"><div>&ge;1 checkworthy claim</div><div class="track"><div class="seg" style="width:47.93%"></div></div><div class="n">5,033</div><div class="pct">47.9%</div><div class="ci">47.0&ndash;48.9</div></div>
+<div class="row"><div>reaches verify</div><div class="track"><div class="seg" style="width:37.80%"></div></div><div class="n">3,969</div><div class="pct">37.8%</div><div class="ci">36.9&ndash;38.7</div></div>
+</div>
+<hr class="rule">
+<p class="note" style="margin-top:1.2rem">Surviving to verify is not the same as recovering
+the <em>right</em> claim. Matching our extracted claims against the note text:</p>
+<div class="funnel">
+<div class="row"><div>noted claim recovered at all</div><div class="track"><div class="seg" style="width:45.34%"></div></div><div class="n">4,761</div><div class="pct">45.3%</div><div class="ci">44.4&ndash;46.3</div></div>
+<div class="row"><div>&hellip; and checkworthy</div><div class="track"><div class="seg" style="width:32.32%"></div></div><div class="n">3,394</div><div class="pct">32.3%</div><div class="ci">31.4&ndash;33.2</div></div>
+<div class="row"><div>&hellip; and verify-eligible</div><div class="track"><div class="seg" style="width:24.97%"></div></div><div class="n">2,622</div><div class="pct">25.0%</div><div class="ci">24.2&ndash;25.8</div></div>
+</div>
+<p class="note">Recovery (45.3%) runs ahead of posts-reaching-verify (37.8%) because matching
+sees every extracted claim, including ones the scope gate later drops. The last row is the
+two conditions together.</p>
+
+<h2>Blind audit &mdash; how many drops are wrong?</h2>
+<p class="note">The auditor sees the post text and nothing else: not the note, not our
+extracted claims, not which stratum the post came from. It answers one question &mdash; does
+this post contain a checkable factual claim? That is what separates a correct drop (the note
+was about an image, or about the account, or there was no claim) from a silent miss. In the
+third stratum a drop counts as wrong only if the blind claim was also absent from what we
+extracted. 400 posts sampled per stratum.</p>
+<div class="wrap"><table>
+<tr><th>stratum</th><th class=n>posts</th><th class=n>audited</th><th class=n>had a claim</th>
+    <th class=n>95% CI</th><th class=n>est. misses</th></tr>
+<tr><td>extraction produced nothing</td><td class=n>4,033</td><td class=n>400</td><td class=n>5.8%</td><td class=n>3.9&ndash;8.5</td><td class=n><b>232</b></td></tr><tr><td>claims, none verify-eligible</td><td class=n>2,498</td><td class=n>400</td><td class=n>51.2%</td><td class=n>46.4&ndash;56.1</td><td class=n><b>1,280</b></td></tr><tr><td>extracted, but not the noted claim</td><td class=n>1,706</td><td class=n>400</td><td class=n>4.8%</td><td class=n>3.1&ndash;7.3</td><td class=n><b>81</b></td></tr>
+<tr class="total"><td>total</td><td class=n>8,237</td><td class=n>1,200</td>
+    <td class=n></td><td class=n></td><td class=n>1,593</td></tr>
+</table></div>
+<p class="note">1,593 posts, 15.2% of the corpus. Most of that is
+one deliberate decision rather than a defect, which the next table separates out.</p>
+
+<h2>Which stage dropped it</h2>
+<p class="note"><code>verify_eligible = checkworthy AND topic not in {entertainment, sports,
+lifestyle}</code> (<code>build_verify_input.py:268</code>). The middle stratum above is
+therefore two different things sharing one manifest status, and splitting them changes the
+reading entirely.</p>
+<div class="wrap"><table>
+<tr><th>stage</th><th></th><th class=n>posts</th><th class=n>of corpus</th><th></th></tr>
+<tr class=""><td>topic excluded by scope policy</td><td class=sub>entertainment, sports, lifestyle</td><td class=n>843</td><td class=n>8.0%</td><td class="tag ">deliberate</td></tr>
+<tr class="miss"><td>checkworthiness gate</td><td class=sub>every claim ruled opinion, promo or unresolved</td><td class=n>437</td><td class=n>4.2%</td><td class="tag f">miss</td></tr>
+<tr class="miss"><td>extraction produced nothing</td><td class=sub>no claim emitted</td><td class=n>232</td><td class=n>2.2%</td><td class="tag f">miss</td></tr>
+<tr class="miss"><td>extracted the wrong claim</td><td class=sub>claims emitted, none of them the noted one</td><td class=n>81</td><td class=n>0.8%</td><td class="tag f">miss</td></tr>
+<tr class="total"><td>hole excluding topic policy</td><td class=sub>what is arguably broken</td>
+    <td class=n>750</td><td class=n>7.1%</td><td></td></tr>
+<tr><td>hole from extraction alone</td><td class=sub>nothing, or the wrong thing, emitted</td>
+    <td class=n>313</td><td class=n>3.0%</td><td></td></tr>
+</table></div>
+<p class="note">Every checkworthy-but-ineligible claim in the audited sample was
+entertainment, sports or lifestyle, with no <code>removed_reason</code> set &mdash; a pure
+topic exclusion, working as designed. The open question is not whether the gate is broken but
+whether published recall should say it is conditioned on that scope.</p>
+
+<h2>Misses by post type</h2>
+<p class="note">Blind classification, weighted back to population &mdash; the three strata
+were sampled equally but differ by a factor of 2.4 in size.</p>
+<div class="wrap"><table>
+<tr><th>post kind</th><th class=n>posts</th><th class=n>share</th><th style="width:32%"></th></tr>
+<tr><td>factual_report</td><td class=n>1,110</td><td class=n>69.7%</td><td class="minibar"><span style="width:69.7%"></span></td></tr>
+<tr><td>attribution</td><td class=n>237</td><td class=n>14.9%</td><td class="minibar"><span style="width:14.9%"></span></td></tr>
+<tr><td>opinion</td><td class=n>129</td><td class=n>8.1%</td><td class="minibar"><span style="width:8.1%"></span></td></tr>
+<tr><td>personal_anecdote</td><td class=n>72</td><td class=n>4.5%</td><td class="minibar"><span style="width:4.5%"></span></td></tr>
+<tr><td>promo</td><td class=n>23</td><td class=n>1.4%</td><td class="minibar"><span style="width:1.4%"></span></td></tr>
+<tr><td>joke_satire</td><td class=n>23</td><td class=n>1.4%</td><td class="minibar"><span style="width:1.4%"></span></td></tr>
+</table></div>
+
+<h2>Where the claim lives</h2>
+<div class="wrap"><table>
+<tr><th>locus</th><th class=n>posts</th><th class=n>share</th><th style="width:32%"></th></tr>
+<tr><td>text</td><td class=n>1,560</td><td class=n>97.9%</td><td class="minibar"><span style="width:97.9%"></span></td></tr>
+<tr><td>unclear_referent</td><td class=n>27</td><td class=n>1.7%</td><td class="minibar"><span style="width:1.7%"></span></td></tr>
+<tr><td>image_or_video</td><td class=n>6</td><td class=n>0.4%</td><td class="minibar"><span style="width:0.4%"></span></td></tr>
+</table></div>
+<p class="note">Media-locus posts were the expected culprit and are not: the claim sits in
+the post text in 98% of misses. Note that these posts were hydrated as text, so the blind
+auditor could only flag a media locus when the text pointed at one.</p>
+
+<h2>Reference &mdash; the pipeline's own reasons</h2>
+<p class="note">Not blind. Our chain's self-reported reasons, for comparison against the
+blind verdicts above.</p>
+<div class="wrap"><table>
+<tr><th>MATCH miss_kind, unmatched posts</th><th class=n>n</th><th class=n>share</th></tr>
+<tr><td>extraction_miss</td><td class=n>3,205</td><td class=n>55.8%</td></tr>
+<tr><td>implicit_framing</td><td class=n>1,701</td><td class=n>29.6%</td></tr>
+<tr><td>media_content</td><td class=n>656</td><td class=n>11.4%</td></tr>
+<tr><td>other</td><td class=n>176</td><td class=n>3.1%</td></tr>
+<tr><td>null</td><td class=n>1</td><td class=n>0.0%</td></tr>
+</table></div>
+<div class="wrap"><table>
+<tr><th>extractor no_claim_reason</th><th class=n>n</th></tr>
+<tr><td>artifact</td><td class=n>2,082</td></tr>
+<tr><td>opinion</td><td class=n>1,662</td></tr>
+<tr><td>promo</td><td class=n>190</td></tr>
+<tr><td>unresolved</td><td class=n>88</td></tr>
+<tr><td>missed-claims</td><td class=n>11</td></tr>
+</table></div>
+
+<h2>What this is and is not</h2>
+<p class="note">The pool is community-noted English posts from the L3 acquitted set, so it
+over-represents contested content by construction and these drop rates are not a timeline
+estimate. Nothing in extraction or the gate was changed to produce them &mdash; this is a
+baseline on the shipped chain, measured before any tuning. The blind auditor is one model
+rather than a human panel, and its judgement of what counts as a checkable claim is the
+load-bearing assumption behind the miss estimate.</p>
+</main>

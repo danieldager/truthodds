@@ -1,0 +1,143 @@
+fourcat/exports/
+
+# LaTeX build artifacts (slides/) — keep .tex and .pdf, drop intermediates
+slides/*.aux
+slides/*.fdb_latexmk
+slides/*.fls
+slides/*.synctex.gz
+slides/*.log
+slides/*.nav
+slides/*.out
+slides/*.snm
+slides/*.toc
+
+# macOS
+.DS_Store
+
+# Machine-transfer cache — personal ~/.claude files ferried via iCloud, never commit.
+# See machine-transfer/RESTORE.md.
+machine-transfer/
+
+# Per-machine Claude settings + iCloud-dehydrated placeholders + Python caches
+.claude/
+*.icloud
+**/__pycache__/
+
+# Derived eval data (regenerable from the seeded scripts) — keep code, not blobs
+src/eval/scripts/*/data/*.parquet
+src/eval/scripts/*/data/*.json
+
+# Cross-machine files synced via iCloud + `devlink` symlinks (see .devsync) — never commit
+fourcat/exports
+src/.env
+
+# --- Big eval-data blobs: gitignored (regenerable via the harvest/build scripts).
+# We TRACK: the compiled gold set (eval_v1.parquet), small CSV/TSV/TXT manifests, and
+# the published survey_claims workbook. We DROP: bulky parquet/jsonl/ndjson blobs +
+# raw working files (harvest dumps, raw survey jsonl, source-accessibility scratch).
+src/eval/data/**/*.parquet
+src/eval/data/**/*.jsonl
+src/eval/data/**/*.ndjson
+!src/eval/data/eval_v1.parquet
+
+# Claim-sourcing: track ONLY the published deliverables; ignore everything else in survey_claims/
+# (intermediate claims_*.csv, source_accessibility, verify_* working parquets, captures/ = X ToS data).
+src/eval/data/survey_claims/*
+!src/eval/data/survey_claims/claim_extractor_prompt.md
+!src/eval/data/survey_claims/sources_pull_summary.csv
+!src/eval/data/survey_claims/claims_pull.csv
+!src/eval/data/survey_claims/verification_results.csv
+!src/eval/data/survey_claims/verification_results.html
+src/eval/data/*.xlsx
+
+# Other untracked working/derived state — kept local, regenerable, never committed
+src/eval/data/verdicts_demo_trace/
+src/eval/data/snapshots/
+src/eval/data/harvest_state.json
+
+# Harvested post images (174 MB) — regenerable via fetch_images; never commit (clog 260626)
+src/eval/data/images/
+
+# Captured X/Twitter posts (zeerover NDJSON) — X ToS restricts redistribution; never commit.
+src/eval/data/tweets/
+
+# Archived study data blobs — the move under _archive (2026-06-26) breaks the per-study
+# data ignore above, so re-ignore derived blobs here; keep the code, not the parquets/json.
+src/eval/scripts/_archive/**/data/
+
+# Raw upstream dumps (2026-07-28): the *.parquet/jsonl/ndjson rules above miss these
+# formats, leaving ~600 MB one `git add -A` away from the history. All re-downloadable.
+src/eval/data/community_notes/raw/
+src/eval/data/averitec/*.json
+
+# Experiment RUN OUTPUT (urn_runs/): per-run records, review packets, audit dumps and
+# pid lists — all regenerable by re-running the runner, and bulky. The .md design notes
+# in the same tree ARE tracked (they are the reasoning record, not output).
+src/eval/data/urn_runs/**/*.json
+src/eval/data/urn_runs/**/*.txt
+
+# Generated audit/spotcheck artifacts — rebuilt by their build_* script on demand.
+src/eval/data/*_audit.html
+src/eval/data/*_audit.csv
+src/eval/data/*_spotcheck.csv
+src/eval/data/fc_harvest_full_state.json
+
+# Scratch that has landed in the tree before (2026-09-12 cleanup): stray experiment dumps at
+# the src/ root, and the queue-wrapper logs beside the tracked run logs in urn_runs/.
+src/*.jsonl
+src/eval/data/urn_runs/queue_*_[0-9]*.log
+
+# NewsGuard-licensed data — internal only, redistribution NOT permitted; NEVER commit.
+# The raw label export + resolved per-domain scores + any workbook/derivative that embeds them.
+label-full-metadata-*.csv
+src/eval/data/newsguard/*
+src/eval/data/source_ratings_unified.xlsx
+
+# READ suite data (regenerable via eval/scripts/_archive/build_eval/build_read_suite.py)
+src/eval/data/read_suite/
+
+# Issue-24 2x2 + bucket-partition optimisation results (2026-09-08): small reference
+# JSON/MD that the clog cites; tracked despite the urn_runs json rule above.
+!src/eval/data/urn_runs/e1_ctx/model_ladder/issue24/*.json
+!src/eval/data/urn_runs/e1_ctx/model_ladder/bucket_opt/*.json
+
+# claimverify runs (2026-09-07+): keep config/manifest/metrics/comparison/artifact,
+# drop the scraped pages, per-claim traces, shards and run logs (2.7 GB, regenerable).
+src/eval/data/claimverify_runs/**/pages/
+src/eval/data/claimverify_runs/**/trace/
+src/eval/data/claimverify_runs/**/*.log
+
+# Reader lab (2026-09-09+): keep the prompts/scripts, the run shells + their logs, the claim
+# lists and the doc-level gold; drop the per-call disk caches (~196k files, 800 MB) and the
+# bulky extract/input intermediates — the chain regenerates them for well under $1.
+src/eval/data/reader_lab/**/*.cache/
+src/eval/data/reader_lab/**/cache/
+src/eval/data/reader_lab/extract/
+src/eval/data/reader_lab/inputs/*.json
+
+# Survey claim selection (2026-09-10+): the scored pools carry HAND-WRITTEN audit verdicts and
+# the reports are published deliverables, so they are tracked despite the survey_claims/* rule
+# above. The pools and candidate claim sets stay out (regenerable by the chain from the harvest).
+!src/eval/data/survey_claims/midband_scored.json
+!src/eval/data/survey_claims/midband_selection.json
+!src/eval/data/survey_claims/midband_selection_report.md
+!src/eval/data/survey_claims/midband_selection_report.html
+!src/eval/data/survey_claims/lowband_scored.json
+!src/eval/data/survey_claims/lowband_selection.json
+!src/eval/data/survey_claims/lowband_selection_report.md
+!src/eval/data/survey_claims/lowband_selection_report.html
+!src/eval/data/survey_claims/lowband_handle_validation.csv
+!src/eval/data/survey_claims/lowband_candidates_probed.csv
+
+# CN survey scoring runs (2026-09-16+): keep the run logs and the smoke record; drop the per-claim
+# dossiers (80 MB each, regenerable), the reader cache and the re-read cache. The scores live in
+# src/eval/data/community_notes/survey_scores_*.parquet.
+src/eval/data/urn_runs/cn_survey/results_full*.jsonl
+src/eval/data/urn_runs/cn_survey/cache/
+src/eval/data/urn_runs/cn_survey/reread_v5/cache/
+
+# The frozen instrument (2026-09-18): the weights the survey selection ships with and the metrics
+# the Final Instrument page cites. Tracked despite the urn_runs json rule.
+!src/eval/data/urn_runs/e1_ctx/weights_v5_ceiling_bal3000.json
+!src/eval/data/urn_runs/e1_ctx/headline_metrics.json
+!src/eval/data/urn_runs/e1_prodregime/prodregime_metrics.json

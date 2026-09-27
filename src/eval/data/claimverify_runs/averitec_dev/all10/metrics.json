@@ -1,0 +1,159 @@
+{
+ "run": "eval/data/claimverify_runs/averitec_dev/all10",
+ "gold": "src/eval/scripts/verification_grading/data/claims_dev_500_gold.parquet",
+ "n_gold_rows": 500,
+ "n_gold_claims": 491,
+ "n_scored_rows": 500,
+ "n_missing_claims": 0,
+ "missing_claims": [],
+ "failed_claims": {},
+ "four_class": {
+  "raw": {
+   "n": 500,
+   "accuracy": 0.502,
+   "macro_f1": 0.43412125852627376,
+   "f1": {
+    "Supported": 0.7009345794392523,
+    "Refuted": 0.6212765957446809,
+    "Not Enough Evidence": 0.17427385892116182,
+    "Conflicting Evidence/Cherrypicking": 0.24
+   },
+   "confusion": {
+    "Supported": {
+     "Supported": 75,
+     "Refuted": 5,
+     "Not Enough Evidence": 41,
+     "Conflicting Evidence/Cherrypicking": 1
+    },
+    "Refuted": {
+     "Supported": 7,
+     "Refuted": 146,
+     "Not Enough Evidence": 130,
+     "Conflicting Evidence/Cherrypicking": 22
+    },
+    "Not Enough Evidence": {
+     "Supported": 5,
+     "Refuted": 4,
+     "Not Enough Evidence": 21,
+     "Conflicting Evidence/Cherrypicking": 5
+    },
+    "Conflicting Evidence/Cherrypicking": {
+     "Supported": 5,
+     "Refuted": 10,
+     "Not Enough Evidence": 14,
+     "Conflicting Evidence/Cherrypicking": 9
+    }
+   }
+  },
+  "claimcheck_convention": {
+   "n": 500,
+   "accuracy": 0.72,
+   "macro_f1": 0.4393756566941326,
+   "f1": {
+    "Supported": 0.7009345794392523,
+    "Refuted": 0.8165680473372781,
+    "Not Enough Evidence": 0.0,
+    "Conflicting Evidence/Cherrypicking": 0.24
+   },
+   "confusion": {
+    "Supported": {
+     "Supported": 75,
+     "Refuted": 46,
+     "Not Enough Evidence": 0,
+     "Conflicting Evidence/Cherrypicking": 1
+    },
+    "Refuted": {
+     "Supported": 7,
+     "Refuted": 276,
+     "Not Enough Evidence": 0,
+     "Conflicting Evidence/Cherrypicking": 22
+    },
+    "Not Enough Evidence": {
+     "Supported": 5,
+     "Refuted": 25,
+     "Not Enough Evidence": 0,
+     "Conflicting Evidence/Cherrypicking": 5
+    },
+    "Conflicting Evidence/Cherrypicking": {
+     "Supported": 5,
+     "Refuted": 24,
+     "Not Enough Evidence": 0,
+     "Conflicting Evidence/Cherrypicking": 9
+    }
+   }
+  }
+ },
+ "binary": {
+  "A": {
+   "n": 500,
+   "n_gold_flag": 378,
+   "n_gold_pass": 122,
+   "accuracy": 0.872,
+   "flag_recall": 0.955026455026455,
+   "fpr": 0.38524590163934425,
+   "precision": 0.8848039215686274
+  },
+  "B": {
+   "n": 500,
+   "n_gold_flag": 340,
+   "n_gold_pass": 160,
+   "accuracy": 0.782,
+   "flag_recall": 0.8852941176470588,
+   "fpr": 0.4375,
+   "precision": 0.8113207547169812
+  },
+  "C": {
+   "n": 462,
+   "n_gold_flag": 340,
+   "n_gold_pass": 122,
+   "accuracy": 0.8722943722943723,
+   "flag_recall": 0.9647058823529412,
+   "fpr": 0.38524590163934425,
+   "precision": 0.8746666666666667
+  }
+ },
+ "speed_cost": {
+  "n_claims": 491,
+  "elapsed_s": {
+   "p50": 183.627,
+   "p90": 722.003,
+   "mean": 269.3492118126273,
+   "sum": 132250.463
+  },
+  "llm_calls": 8436,
+  "llm_cache_hits": 2348,
+  "serper_calls": 781,
+  "exa_calls": 257,
+  "scrapes": 6745,
+  "tokens": {
+   "prompt": 16726510,
+   "cached": 3068416,
+   "completion": 295462
+  },
+  "cost_usd": 1.031704,
+  "cost_by_source": {
+   "cache": 0.0,
+   "deepinfra.estimated_cost": 1.031701
+  }
+ },
+ "maps": {
+  "raw": {
+   "supported": "Supported",
+   "refuted": "Refuted",
+   "unsupported": "Not Enough Evidence",
+   "conflicting": "Conflicting Evidence/Cherrypicking"
+  },
+  "claimcheck_convention": {
+   "supported": "Supported",
+   "refuted": "Refuted",
+   "unsupported": "Refuted",
+   "conflicting": "Conflicting Evidence/Cherrypicking"
+  }
+ },
+ "status_counts": {
+  "refuted": 165,
+  "supported": 86,
+  "unsupported": 203,
+  "conflicting": 37
+ }
+}

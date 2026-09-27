@@ -1,0 +1,52 @@
+{
+ "dataset": "fc_gold_v3",
+ "built": "2026-07-27",
+ "built_by": "eval/scripts/build_eval/enrich_fc_gold_fci.py",
+ "git_commit": "cc2e77fcc645535b64d222c55c25f98f37b6a2b4",
+ "source_dataset": {
+  "path": "eval/data/fc_gold_v2_clustered.parquet",
+  "rows": 47111,
+  "sha256": "abdbdc8a699c32db50e7da043137a0459dee11c4947667db9eadb6452ee58721"
+ },
+ "enrichment_source": {
+  "path": "~/Downloads/fact_check_insights.json",
+  "sha256": "d48eb9874957aa7583f426f6f0637b0dba1db9a1a9629bc475ccee5761284399",
+  "bytes": 313267653,
+  "retrieved_at": "2025-09-08 06:01:16 +0000",
+  "claim_review_count": 257877,
+  "media_review_count": 2986
+ },
+ "match_key": "(norm_url, norm_claim_text)",
+ "normaliser_version": "url-v2/text-v1",
+ "accepted_statuses": [
+  "exact",
+  "exact_multiclaim",
+  "near"
+ ],
+ "near_threshold_jaccard": 0.9,
+ "status_counts": {
+  "exact": 21732,
+  "no_url_match": 22555,
+  "exact_multiclaim": 2524,
+  "claim_mismatch": 286,
+  "near": 12,
+  "ambiguous": 2
+ },
+ "matched": 24268,
+ "matched_pct_of_url_matched": 98.83,
+ "payload": {
+  "rows_with_post_url": 6521,
+  "rows_with_social_post_url": 4416,
+  "post_urls_total": 7257,
+  "self_referential_urls_dropped": 28,
+  "rows_with_fc_rationale": 4920,
+  "claim_dates_filled": 1143,
+  "veracity_filled": 204
+ },
+ "not_taken": {
+  "rating_value": "per-publisher direction unreliable; veracity already harmonised",
+  "claim_text_only_fallback": "recovers 6.0% of unmatched, 79 post URLs; collision risk"
+ },
+ "audit_page": "eval/data/fci_enrichment_audit.html",
+ "lineage": "eval/data/fc_gold_lineage.md"
+}

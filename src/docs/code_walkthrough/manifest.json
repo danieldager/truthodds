@@ -1,0 +1,2079 @@
+{
+ "title": "Pipeline Code Walkthrough",
+ "subtitle": "How our fact-checking instrument turns one claim into one number, end to end, with the real source code embedded. Frozen reading copy for the model-spec and pre-registration write-up.",
+ "sections": [
+  {
+   "id": "0-overview",
+   "title": "0. Overview and glossary",
+   "prose": "This page is the reading copy of our fact-checking instrument, with the real source code embedded. It is meant to be read top to bottom by someone who has never opened the repo. Every code block is pulled verbatim from the frozen commit by the build script; nothing here is paraphrased.\n\nThe instrument turns one short claim into one number. We extract check-worthy claims from a post, write one search query per claim, retrieve the top ten documents, read each (claim, document) pair with an LLM that returns one of a few flags, and add up fitted per-flag log-odds weights into an evidence score. A score below a fitted boundary means we flag the claim as likely false.\n\nOne thing to hold on to before you read on. The SHIPPED instrument (frozen 2026-09-21) is read-v5 (seven flags: 5,4,3,X,I,2,1), fit on fc_gold_bal3000 with boundary -4.0115; it is the DEFAULT the main runner uses and the survey pool is scored under. An earlier six-flag experiment, read-v6.1, was the shipped fit on 2026-09-14 to 2026-09-21; it is now archived (headline_metrics_v61_sixflag_2026-09-21.json) and stays selectable via --reader read-v6.1. Section 15 lays out exactly which files and weights belong to which. Where the code and the notes disagree, this page follows the code and flags the disagreement.",
+   "diagram": "<div style=\"font-family:var(--mono);font-size:12px;color:var(--ink)\"><div style=\"display:flex;flex-wrap:wrap;align-items:center;gap:6px\"><span style=\"padding:6px 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface-2)\">post</span><span style=\"color:var(--accent)\">&rarr;</span><span style=\"padding:6px 10px;border:1px solid var(--border);border-radius:8px\">extract claims<br><span style=\"color:var(--ink-faint)\">key_claim_extract</span></span><span style=\"color:var(--accent)\">&rarr;</span><span style=\"padding:6px 10px;border:1px solid var(--border);border-radius:8px\">filter + screen<br><span style=\"color:var(--ink-faint)\">key_claim_filter / _screen</span></span><span style=\"color:var(--accent)\">&rarr;</span><span style=\"padding:6px 10px;border:1px solid var(--border);border-radius:8px\">query<br><span style=\"color:var(--ink-faint)\">query-v3</span></span><span style=\"color:var(--accent)\">&rarr;</span><span style=\"padding:6px 10px;border:1px solid var(--border);border-radius:8px\">Serper top 10<br><span style=\"color:var(--ink-faint)\">minus origin</span></span><span style=\"color:var(--accent)\">&rarr;</span><span style=\"padding:6px 10px;border:1px solid var(--border);border-radius:8px\">read each doc<br><span style=\"color:var(--ink-faint)\">read-v6.1 / read-v5</span></span><span style=\"color:var(--accent)\">&rarr;</span><span style=\"padding:6px 10px;border:1px solid var(--border);border-radius:8px\">flag per doc</span><span style=\"color:var(--accent)\">&rarr;</span><span style=\"padding:6px 10px;border:1px solid var(--border);border-radius:8px\">&sum; log-odds weights<br><span style=\"color:var(--ink-faint)\">urn score</span></span><span style=\"color:var(--accent)\">&rarr;</span><span style=\"padding:6px 10px;border:1px solid var(--accent);border-radius:8px;background:var(--accent-soft)\">score &lt; boundary?<br><span style=\"color:var(--ink-faint)\">flag / pass</span></span></div><p style=\"color:var(--ink-faint);margin:12px 0 0;font-size:11.5px\">All LLM steps run on deepseek-ai/DeepSeek-V4-Flash via DeepInfra, temperature 0, JSON output. The runner is evidence_urn_run.py.</p></div>",
+   "glossary": [
+    {
+     "term": "urn / evidence urn",
+     "def": "our name for the scoring model: each document is a coloured ball (its flag), and the claim's score is the summed log-odds of the balls drawn. The name comes from the Truth Odds framing."
+    },
+    {
+     "term": "flag",
+     "def": "the single label a read assigns to one (claim, document) pair. Seven in read-v5 (5,4,3,X,I,2,1), six in read-v6.1 (the '3' removed). 5=establishes claim, 1=disproves it, X=on-claim context, I=irrelevant."
+    },
+    {
+     "term": "read",
+     "def": "one LLM call that judges one document against one claim and returns a flag plus the sentence numbers it relied on."
+    },
+    {
+     "term": "read-v5",
+     "def": "the seven-flag reader prompt (READ_SYS_MODE, hash 92404a300e14). The FROZEN survey-selection reader."
+    },
+    {
+     "term": "read-v6.1",
+     "def": "the six-flag reader prompt (READ_SYS_V6_1, hash 57d8dbc5df6d) = read-v5 with the '3' button removed and nothing else. The 2026-09-14 shipped experiment; superseded 2026-09-21 by the read-v5 freeze, still selectable via --reader read-v6.1."
+    },
+    {
+     "term": "boundary",
+     "def": "the score threshold below which a claim is flagged as likely false. Chosen as the nested out-of-fold threshold at 2% false-positive rate. -4.0115 (the SHIPPED read-v5 freeze on bal3000); -3.5839 was the archived read-v6.1 rep1500 fit."
+    },
+    {
+     "term": "TRAINING mode",
+     "def": "the frozen survey weights file weights_v5_ceiling_bal3000.json and its boundary -4.0115; the freeze the survey pool selection uses. Written into headline_metrics.json 2026-09-21 by fit_ceiling_weights.py --ship (see section 15)."
+    },
+    {
+     "term": "Arm S",
+     "def": "the Serper-only production-regime arm (date ceiling off, echo-pass leak control). Its six-flag weights + boundary -6.7949 live in prodregime_metrics.json and were used to score the survey pool on 2026-09-16."
+    },
+    {
+     "term": "fc_gold",
+     "def": "the labelled claim set harvested from fact-checkers, frozen at 3,280 claims (populations/fc_gold.parquet). The training/validation set for the weights."
+    },
+    {
+     "term": "rep1500",
+     "def": "fc_gold_rep1500.parquet, a 1,500-claim balanced slice (750 true / 750 false, seed 20260914) drawn from the frozen 3,236 that tracks full-corpus difficulty; the fitting population for the shipped six-flag instrument."
+    },
+    {
+     "term": "quasi-label",
+     "def": "a proxy veracity label for a Community Notes post (a currently-helpful 'misinformed' note = quasi-false). A post-level suspicion signal, not a fact-check verdict."
+    },
+    {
+     "term": "cn_false / wire_true / feed_mixed",
+     "def": "the label-free urn populations: Community Notes false posts, wire-service true posts, and the mixed X feed (feed_mixed is the file x_feed.parquet). Used for the two-urn transfer test."
+    },
+    {
+     "term": "mode (attribution vs assertion)",
+     "def": "whether a claim is about who SAID something (attribution) or about the world (assertion). Defined in claim_modes.py; importable but stripped out of the read-v5 production prompt."
+    },
+    {
+     "term": "oof AUC",
+     "def": "out-of-fold area under the ROC curve: AUC computed on held-out folds in 5-fold cluster-disjoint cross-validation, so weights never score their own training claims."
+    },
+    {
+     "term": "recall@2%FPR",
+     "def": "the fraction of truly-false claims we flag while holding false positives on true claims at 2%. The instrument's headline operating point."
+    },
+    {
+     "term": "PAD_TO / pad-to-ten",
+     "def": "every claim's document slots are padded to ten silent (no-direction) slots before summing weights, so a claim with few retrieved documents is not scored as more certain than one with ten."
+    },
+    {
+     "term": "prompt_hash",
+     "def": "a short hash of a prompt's text stamped into every run record (eval/prompt_hash.py), so a run can be tied to the exact prompt bytes that produced it."
+    },
+    {
+     "term": "origin exclusion",
+     "def": "we never let a claim's own source verify it: the origin publisher's domain (and x.com for a tweet) is excluded from retrieval. Logic in run_claim + verify_tweet_claims helpers."
+    }
+   ],
+   "excerpts": [
+    {
+     "path": "src/eval/scripts/build_eval/evidence_urn_run.py",
+     "start": 1,
+     "end": 29,
+     "expect": "E1 runner",
+     "caption": "The runner's own docstring: the per-claim pipeline in one screen, and the cost controls (cached prompt prefix, sequential-within-claim reads, budget abort).",
+     "collapsed": false
+    }
+   ]
+  },
+  {
+   "id": "1-launch",
+   "title": "1. How a run is launched",
+   "prose": "Every run is a Python module under eval.scripts.build_eval, launched with `uv run python -m ...`. The main retrieval+read runner is `evidence_urn_run` (E1, fc_gold); the Community-Notes survey uses `cn_survey_verify` (verify) + `cn_survey_score` (score). All read model, DeepInfra base URL and API key come from `src/config.py` (VERIFICATION_MODEL = DeepSeek-V4-Flash, EXTRACTION_BASE_URL = DeepInfra OpenAI-compatible endpoint, key from env DEEPINFRA_API_KEY via python-dotenv). The key-claim survey chain (extract -> filter -> screen) runs before evidence_urn_run to select claims. All chain stages default to DeepSeek-V4-Flash on the deepinfra provider.",
+   "excerpts": [
+    {
+     "path": "src/config.py",
+     "start": 7,
+     "end": 33,
+     "expect": "VERIFICATION_MODEL",
+     "caption": "Env + model config: load_dotenv(), EXTRACTION_BASE_URL (DeepInfra), API key from os.environ['DEEPINFRA_API_KEY'], VERIFICATION_MODEL = DeepSeek-V4-Flash, SEARCH_PROVIDER pinned to serper. No secret literal — keys are read from the environment.",
+     "collapsed": false
+    },
+    {
+     "path": "src/eval/scripts/build_eval/evidence_urn_run.py",
+     "start": 44,
+     "end": 50,
+     "expect": "from pipeline.verify_tweet_claims import",
+     "caption": "evidence_urn_run's imports: the config env (VERIFICATION_MODEL, EXTRACTION_BASE_URL, EXTRACTION_API_KEY), the FACT_CHECK_DOMAINS eval block, TRUSTED_FACTCHECKERS, the retrieval functions (search/scrape/newsguard_score_map/SearchError) and the three verify helpers (_domain_of, _rel_info, _voice_key). This is the wiring diagram of the whole cluster.",
+     "collapsed": false
+    },
+    {
+     "path": "src/eval/scripts/build_eval/cn_survey_verify.py",
+     "start": 29,
+     "end": 37,
+     "expect": "cn_survey_verify --smoke",
+     "caption": "cn_survey_verify launch: --smoke (20 claims) then --full --preflight after approval; reuses the prodregime Arm-S primitives (query-v3 -> Serper top-10 -> read-v6.1), unrestrained (date ceiling OFF, FC-drop OFF), only origin-source exclusion ON.",
+     "collapsed": false
+    }
+   ],
+   "commands": [
+    "uv run python -m eval.scripts.build_eval.evidence_urn_run --smoke",
+    "uv run python -m eval.scripts.build_eval.evidence_urn_run --budget 10",
+    "uv run python -m eval.scripts.build_eval.key_claim_extract --posts eval/data/reader_lab/inputs/outlet_posts_all.json --dates eval/data/reader_lab/inputs/e2_rescored.parquet --out eval/data/reader_lab/extract/keyclaims_v1.json --model deepseek-ai/DeepSeek-V4-Flash",
+    "uv run python -m eval.scripts.build_eval.key_claim_filter --claims eval/data/reader_lab/extract/keyclaims_v3.json --out eval/data/reader_lab/extract/filter_v3.json",
+    "uv run python -m eval.scripts.build_eval.key_claim_screen --claims eval/data/reader_lab/extract/keyclaims_midband.json --filter eval/data/reader_lab/extract/filter_midband.json --out eval/data/reader_lab/extract/screen_midband.json",
+    "uv run python -m eval.scripts.build_eval.cn_survey_verify --smoke",
+    "uv run python -m eval.scripts.build_eval.cn_survey_verify --full --preflight",
+    "uv run python -m eval.scripts.build_eval.cn_survey_score --run full"
+   ],
+   "also_relevant": [
+    "src/eval/scripts/build_eval/evidence_urn_run.py:1-38 — the runner docstring: query-v3 -> Serper top-10 under a claim-date ceiling with FC-block + reviewing-publisher exclusion -> read ALL results (read-v5/v6.1) -> per-doc pointer flag; cost controls (prompt_cache_key caching, sequential-within-claim/parallel-across-claims, budget meter). Argparse/logging is boilerplate — pointered here.",
+    "src/eval/scripts/build_eval/key_claim_extract.py:261-270, key_claim_filter.py:209-216, key_claim_screen.py:144-151 — the argparse blocks (defaults: model deepseek-ai/DeepSeek-V4-Flash, provider deepinfra, workers 64).",
+    "src/eval/scripts/build_eval/cn_survey_score.py:79-80 — the scorer's only arg is --run (default 'full').",
+    "REPO_MAP.md:114-148 (§7) — the survey/outlet chain overview and generation lineage."
+   ]
+  },
+  {
+   "id": "2-datasets",
+   "title": "2. Inputs and how data is organised on disk",
+   "prose": "All eval data lives under a single root `src/eval/data/`. `populations/` holds the FROZEN, sha256-pinned evaluation populations (fc_gold, cn_false, x_feed) plus the reproducible balanced fitting draws and a `manifest.json` recording every row-selection rule chain and its input file hashes. Run outputs land in `urn_runs/<run>/` as `results-*.jsonl` (resumable by review_url / claim_id). Community-Notes work (harvest, selection, scored survey pools) lives in `community_notes/`. Most parquet/jsonl are gitignored regenerable blobs (~8.8 GB); only the frozen populations, small manifests, configs/metrics and .log files are tracked.",
+   "dirmap": [
+    {
+     "path": "eval/data/populations/",
+     "what": "FROZEN pinned eval populations: fc_gold.parquet (3,280), cn_false.parquet (1,739), x_feed.parquet (1,970), the balanced fitting draws (fc_gold_rep1500 / clean1500 / bal3000), plus manifest.json (rule chains + input sha256s) and refit_results*.json.",
+     "writer": "eval/scripts/build_eval/freeze_populations.py (+ build_fc_gold_bal3000.py); re-running rewrites the pinned manifest — do not run casually.",
+     "reader": "fit_urn / fit_two_urn / graded_urn / refit_report / score_frozen_urn and every downstream instrument fit."
+    },
+    {
+     "path": "eval/data/urn_runs/",
+     "what": "One subdir per run (e1_ctx, cn_survey, c2_false, true_timeline, e4_midband, ...); each holds results-*.jsonl, meta/metrics json, and a <name>.log console record. e1_ctx = the pinned fc-gold E1; cn_survey = the CN survey verification.",
+     "writer": "evidence_urn_run / cn_survey_verify / the other *_urn_run runners.",
+     "reader": "the fit/score/report scripts and freeze_populations (reads results-00.jsonl as fc_gold source)."
+    },
+    {
+     "path": "eval/data/community_notes/",
+     "what": "CN pipeline: eligible_posts.parquet (note-eligible feed), survey_candidates_2026-09-15.parquet (9,698 pre-selection pool), survey_claims_*.parquet (kept claims), survey_scores_2026-09-17_v5.parquet (1,660 scored survey pool), cn_gold*.parquet, picks/gapfill json, manifest.json.",
+     "writer": "harvest_note_eligible_posts, select_cn_survey_examples, the key_claim chain, cn_survey_verify -> cn_survey_score.",
+     "reader": "cn_survey_verify (survey_claims), the survey selection/report scripts, cn_false population build."
+    },
+    {
+     "path": "eval/data/tweet_corpus/",
+     "what": "Post corpora keyed by post_id (outlet_tweets, timeline_urn, cn_false_urn_posts, ...) — the raw posts behind the claim populations.",
+     "writer": "the harvesters (harvest_outlet_tweets etc.).",
+     "reader": "population builds (cn_false, x_feed) and the runners for post text/date."
+    },
+    {
+     "path": "eval/data/reader_lab/",
+     "what": "Re-read trees + doc-level gold (reader_lab/gold, 1,016 pairs) + inputs/ (outlet_posts_all.json, e2_rescored.parquet) + gate_observations.jsonl.",
+     "writer": "reader_lab.py (RateGate re-read runner), key_claim_* inputs.",
+     "reader": "reader_lab_score, the read-prompt A/B work."
+    },
+    {
+     "path": "eval/data/newsguard/",
+     "what": "newsguard_scores.parquet (domain -> 0-100 score); proprietary, gitignored — degrades to empty map if absent.",
+     "writer": "upstream NewsGuard dump (never committed).",
+     "reader": "search.newsguard_score_map(), credibility rerank, verify _rel_info/_ng_of."
+    },
+    {
+     "path": "eval/data/exclusions/",
+     "what": "registry.parquet — every exclusion ruling (media/demonstrative/claim-shape) from seven sources, 1,059 rulings.",
+     "writer": "build_exclusion_registry.py.",
+     "reader": "population builds and audits."
+    },
+    {
+     "path": "eval/data/claimverify_runs/",
+     "what": "ClaimCheck-loop verification runs (averitec_dev, fc_gold/top3); configs/manifests/metrics tracked, pages/traces ignored.",
+     "writer": "the claimverify runners.",
+     "reader": "verdict eval/report scripts."
+    },
+    {
+     "path": "eval/data/survey_claims/",
+     "what": "Mid/low-band scored pools + selection reports (.html cards); tracked deliverables.",
+     "writer": "select_midband / build_midband_report.",
+     "reader": "collaborator review."
+    },
+    {
+     "path": "eval/data/ (loose parquets)",
+     "what": "Working datasets and lineage snapshots: truthodds_cal/val, claim_context_cal, claim_resolution, judged_axis_llm, fc_gold_v3, claim_screen_e1, claim_mode_final — the inputs evidence_urn_run joins, and the audit .preclean twins. Plus upstream harvests (snopes/politifact/afp/... _harvest.parquet).",
+     "writer": "the harvest + audit + context/resolution scripts.",
+     "reader": "evidence_urn_run (CAL/CTX/RES/GATE/SCREEN/MODEF) and freeze_populations."
+    }
+   ],
+   "schemas": [
+    {
+     "name": "fc_gold.parquet",
+     "path": "eval/data/populations/fc_gold.parquet",
+     "shape": "3280 x 7",
+     "columns": [
+      {
+       "col": "claim_id",
+       "dtype": "str",
+       "meaning": "unique claim identifier"
+      },
+      {
+       "col": "cluster_id",
+       "dtype": "i64",
+       "meaning": "source-cluster id for dedup / cluster-disjoint folds (singletons in the frozen draws)"
+      },
+      {
+       "col": "veracity",
+       "dtype": "i64",
+       "meaning": "1 = certainly false ... 5 = true (never inverted)"
+      },
+      {
+       "col": "rating_subtype",
+       "dtype": "str",
+       "meaning": "clear_true / clear_false / mostly_true / mostly_false / mixed"
+      },
+      {
+       "col": "judged_axis_llm",
+       "dtype": "str",
+       "meaning": "decisive-proposition axis: event_occurrence, quote_attribution, statistic_figure, policy_law, causal_effect, attribute_identity, media_authenticity"
+      },
+      {
+       "col": "y",
+       "dtype": "i64",
+       "meaning": "binary label: 1 = true (veracity 4/5), 0 = false"
+      },
+      {
+       "col": "mid",
+       "dtype": "bool",
+       "meaning": "veracity-3 / unprovable flag (excluded from balanced T/F draws)"
+      }
+     ]
+    },
+    {
+     "name": "cn_false.parquet",
+     "path": "eval/data/populations/cn_false.parquet",
+     "shape": "1739 x 4",
+     "columns": [
+      {
+       "col": "claim_id",
+       "dtype": "str",
+       "meaning": "unique claim identifier"
+      },
+      {
+       "col": "post_id",
+       "dtype": "str",
+       "meaning": "source X/Twitter post id the claim came from"
+      },
+      {
+       "col": "author",
+       "dtype": "str",
+       "meaning": "post author handle"
+      },
+      {
+       "col": "side",
+       "dtype": "str",
+       "meaning": "political lean of the post (left/right)"
+      }
+     ]
+    },
+    {
+     "name": "x_feed.parquet",
+     "path": "eval/data/populations/x_feed.parquet",
+     "shape": "1970 x 5",
+     "columns": [
+      {
+       "col": "claim_id",
+       "dtype": "str",
+       "meaning": "unique claim identifier"
+      },
+      {
+       "col": "post_id",
+       "dtype": "str",
+       "meaning": "source X post id (the timeline / feed_mixed population)"
+      },
+      {
+       "col": "handle",
+       "dtype": "str",
+       "meaning": "author handle"
+      },
+      {
+       "col": "frame",
+       "dtype": "str",
+       "meaning": "framing category of the claim"
+      },
+      {
+       "col": "side",
+       "dtype": "str",
+       "meaning": "political lean (left/right)"
+      }
+     ]
+    },
+    {
+     "name": "fc_gold_rep1500.parquet",
+     "path": "eval/data/populations/fc_gold_rep1500.parquet",
+     "shape": "1500 x 1",
+     "columns": [
+      {
+       "col": "claim_id",
+       "dtype": "str",
+       "meaning": "ids-only pointer to the pinned REPRESENTATIVE balanced fitting slice (750 T / 750 F, seed 20260914, stratified by axis x veracity); join to fc_gold.parquet for features. The shipped read-v6.1 six-flag headline is fit on this slice."
+      }
+     ]
+    },
+    {
+     "name": "survey_scores_2026-09-17_v5.parquet",
+     "path": "eval/data/community_notes/survey_scores_2026-09-17_v5.parquet",
+     "shape": "1660 x 26",
+     "columns": [
+      {
+       "col": "claim_id",
+       "dtype": "str",
+       "meaning": "claim identifier"
+      },
+      {
+       "col": "post_id",
+       "dtype": "str",
+       "meaning": "source X post id"
+      },
+      {
+       "col": "claim",
+       "dtype": "str",
+       "meaning": "the claim text scored"
+      },
+      {
+       "col": "lean",
+       "dtype": "str",
+       "meaning": "political lean (left/right)"
+      },
+      {
+       "col": "label",
+       "dtype": "str",
+       "meaning": "Community-Notes-derived label (e.g. false/true) — eval-only, never fed to the instrument"
+      },
+      {
+       "col": "month",
+       "dtype": "str",
+       "meaning": "post month bucket"
+      },
+      {
+       "col": "subtopic",
+       "dtype": "str",
+       "meaning": "topic / subtopic tag"
+      },
+      {
+       "col": "post_date",
+       "dtype": "str",
+       "meaning": "post date (the only temporal signal the instrument sees)"
+      },
+      {
+       "col": "query",
+       "dtype": "str",
+       "meaning": "the query-v3 search query generated for this claim"
+      },
+      {
+       "col": "score",
+       "dtype": "f64",
+       "meaning": "urn log-odds score (six-flag read-v6.1 weights)"
+      },
+      {
+       "col": "flag",
+       "dtype": "bool",
+       "meaning": "flagged (score below the pinned boundary) -> nudge"
+      },
+      {
+       "col": "n_docs",
+       "dtype": "i64",
+       "meaning": "documents retrieved"
+      },
+      {
+       "col": "n_reads",
+       "dtype": "i64",
+       "meaning": "documents read"
+      },
+      {
+       "col": "n_5/n_4/n_3/n_X/n_I/n_2/n_1",
+       "dtype": "i64",
+       "meaning": "per-flag vote counts across read docs (5/4/3/contested-X/insufficient-I/2/1)"
+      },
+      {
+       "col": "n_pad_I",
+       "dtype": "i64",
+       "meaning": "silent-document pad slots counted as I (pad-to-10)"
+      },
+      {
+       "col": "n_fc_docs",
+       "dtype": "i64",
+       "meaning": "fact-check-domain docs among reads (tagged, kept, read)"
+      },
+      {
+       "col": "top_domains",
+       "dtype": "str",
+       "meaning": "top evidence domains (serialized)"
+      },
+      {
+       "col": "dossier",
+       "dtype": "str",
+       "meaning": "serialized per-doc evidence dossier"
+      },
+      {
+       "col": "error",
+       "dtype": "str",
+       "meaning": "error string if the claim failed (else empty/null)"
+      },
+      {
+       "col": "prompt_hash",
+       "dtype": "str",
+       "meaning": "read prompt hash (provenance)"
+      }
+     ]
+    },
+    {
+     "name": "survey_candidates_2026-09-15.parquet",
+     "path": "eval/data/community_notes/survey_candidates_2026-09-15.parquet",
+     "shape": "9698 x 25",
+     "columns": [
+      {
+       "col": "id",
+       "dtype": "str",
+       "meaning": "post id"
+      },
+      {
+       "col": "url",
+       "dtype": "str",
+       "meaning": "post URL"
+      },
+      {
+       "col": "date",
+       "dtype": "datetime(us,UTC)",
+       "meaning": "post timestamp"
+      },
+      {
+       "col": "month",
+       "dtype": "str",
+       "meaning": "month bucket"
+      },
+      {
+       "col": "author",
+       "dtype": "str",
+       "meaning": "author handle"
+      },
+      {
+       "col": "author_name",
+       "dtype": "str",
+       "meaning": "author display name"
+      },
+      {
+       "col": "lean",
+       "dtype": "str",
+       "meaning": "political lean"
+      },
+      {
+       "col": "lean_reason",
+       "dtype": "str",
+       "meaning": "why the lean was assigned"
+      },
+      {
+       "col": "topic",
+       "dtype": "str",
+       "meaning": "topic tag"
+      },
+      {
+       "col": "quasi_label",
+       "dtype": "str",
+       "meaning": "provisional veracity label from the CN note"
+      },
+      {
+       "col": "note_summary",
+       "dtype": "str",
+       "meaning": "summary of the Community Note"
+      },
+      {
+       "col": "n_notes_used",
+       "dtype": "u32",
+       "meaning": "number of notes aggregated"
+      },
+      {
+       "col": "followers/impressions/likes/replies",
+       "dtype": "i64",
+       "meaning": "reach/engagement metrics"
+      },
+      {
+       "col": "retweets",
+       "dtype": "null",
+       "meaning": "always null in this snapshot"
+      },
+      {
+       "col": "media",
+       "dtype": "str",
+       "meaning": "attached media descriptor"
+      },
+      {
+       "col": "is_quote",
+       "dtype": "bool",
+       "meaning": "is a quote-tweet"
+      },
+      {
+       "col": "is_reply",
+       "dtype": "bool",
+       "meaning": "is a reply"
+      },
+      {
+       "col": "note_public",
+       "dtype": "bool",
+       "meaning": "the CN note is public"
+      },
+      {
+       "col": "possibly_sensitive",
+       "dtype": "bool",
+       "meaning": "flagged possibly sensitive"
+      },
+      {
+       "col": "text",
+       "dtype": "str",
+       "meaning": "raw post text"
+      },
+      {
+       "col": "clean_text",
+       "dtype": "str",
+       "meaning": "cleaned post text"
+      },
+      {
+       "col": "wc",
+       "dtype": "u32",
+       "meaning": "word count of clean_text"
+      }
+     ]
+    },
+    {
+     "name": "results-00.jsonl (e1_ctx urn run)",
+     "path": "eval/data/urn_runs/e1_ctx/results-00.jsonl",
+     "shape": "per-claim JSON record (one line per claim)",
+     "columns": [
+      {
+       "col": "review_url",
+       "dtype": "str",
+       "meaning": "fact-check review URL = the claim's resume key"
+      },
+      {
+       "col": "claim_text / claim_resolved",
+       "dtype": "str",
+       "meaning": "raw claim text / date-and-referent-resolved claim"
+      },
+      {
+       "col": "publisher_site",
+       "dtype": "str",
+       "meaning": "reviewing fact-checker's site (excluded from retrieval)"
+      },
+      {
+       "col": "veracity",
+       "dtype": "float",
+       "meaning": "gold veracity 1..5"
+      },
+      {
+       "col": "rating_subtype / claim_type / judged (topic)",
+       "dtype": "str",
+       "meaning": "gold rating subtype, claim type, topic"
+      },
+      {
+       "col": "yr",
+       "dtype": "str",
+       "meaning": "claim year"
+      },
+      {
+       "col": "resolution_status / screen_verdict / screen_leak / context_used",
+       "dtype": "str/bool",
+       "meaning": "referent-resolution + claim-screen outcome, leak flag, whether context was used"
+      },
+      {
+       "col": "claim_date_shown / ceiling / ceiling_src",
+       "dtype": "str",
+       "meaning": "date passed to the prompt; the retrieval date ceiling and its source (claim_date/x_date/review-1)"
+      },
+      {
+       "col": "prompts",
+       "dtype": "dict{query,read,clean,prep}",
+       "meaning": "the exact prompt hashes/text used at each step"
+      },
+      {
+       "col": "results",
+       "dtype": "list",
+       "meaning": "per-document evidence: URL, NG tier, voice key, reliability tag, flag/logprob, sentence-split text pointers"
+      },
+      {
+       "col": "query / search_stats",
+       "dtype": "str/dict{resampled}",
+       "meaning": "the search query issued; whether page-2 backfill (resampled) fired"
+      },
+      {
+       "col": "cost",
+       "dtype": "float",
+       "meaning": "estimated_cost for this claim"
+      }
+     ]
+    },
+    {
+     "name": "results_full_v5.jsonl (cn_survey run)",
+     "path": "eval/data/urn_runs/cn_survey/results_full_v5.jsonl",
+     "shape": "per-claim JSON record (one line per claim)",
+     "columns": [
+      {
+       "col": "claim_id / post_id",
+       "dtype": "str",
+       "meaning": "claim + source post ids"
+      },
+      {
+       "col": "claim",
+       "dtype": "str",
+       "meaning": "claim text (all the instrument sees, plus post_date)"
+      },
+      {
+       "col": "post_date",
+       "dtype": "str",
+       "meaning": "post date passed to query-v3 and the read block"
+      },
+      {
+       "col": "lean / label / month / subtopic",
+       "dtype": "str",
+       "meaning": "eval-only metadata (lean, CN label, month bucket, subtopic) — never enters a prompt"
+      },
+      {
+       "col": "group_id",
+       "dtype": "int",
+       "meaning": "dedup/selection group id"
+      },
+      {
+       "col": "query",
+       "dtype": "str",
+       "meaning": "query-v3 search query generated for the claim"
+      },
+      {
+       "col": "docs",
+       "dtype": "list[dict]",
+       "meaning": "per-document evidence records (URL, domain, NG/reliability tag, read flag, evidence pointers)"
+      }
+     ]
+    }
+   ],
+   "excerpts": [
+    {
+     "path": "src/eval/data/populations/manifest.json",
+     "start": 1,
+     "end": 105,
+     "expect": "git_rev",
+     "caption": "The frozen populations spec: per-population row-selection rule chains (E1 draw -> veracity/axis/subtype filters -> media/attribution exclusions) and the input sha256 block that pins every source file. Built by freeze_populations; re-running rewrites this manifest.",
+     "collapsed": true
+    }
+   ],
+   "also_relevant": [
+    "REPO_MAP.md:194-245 (§9 Data / §10 Run directories) — what is frozen vs regenerable, and one row per urn run dir with its reader version and status.",
+    "eval/data/populations/fc_gold_bal3000.manifest.json + fc_gold_sub1000.manifest.json — companion manifests for the doubled balanced draw and the sub1000 slice (same rule-chain shape).",
+    "eval/data/community_notes/manifest.json and eval/data/urn_runs/e1_ctx/media_provenance_exclusions.json — the CN-side manifest and the media-provenance exclusion list referenced by the fc_gold rule chain."
+   ]
+  },
+  {
+   "id": "2b-lineage",
+   "title": "2b. Dataset lineage: how each reported dataset was built",
+   "prose": "Every headline number in this page rests on a small set of frozen datasets. This section traces each one back to the committed code that produced it, so a reader can see exactly how the evaluation populations were built — not just what they contain. The table below maps each reported dataset to its builder script (and the key function), the seed or rule that makes the draw reproducible, and which result it feeds.\n\nTwo facts are load-bearing. First, the labelled fc_gold set is pulled fresh from the Google Fact Check Tools API by harvest_full.py; it is NOT built from the per-publisher scrapers (Snopes/PolitiFact/AFP/...), which built a separate legacy eval set and are now archived under src/_archive/factcheck_harvest_lib/. Second, two datasets that back reported numbers have NO committed builder — they are pinned files with no script in the repo that writes them; they are flagged in the table and listed at the end. Everything else is reproducible from the excerpts that follow, which embed each builder's decisive function (the veracity mapping, the admission rule, the seeded cluster-disjoint split, the population freeze, the balanced draw, the false-urn draw, the true-feed urn).",
+   "diagram": "<div class=\"tablewrap\"><table class=\"dirmap\">\n<tr><th>Reported dataset</th><th>Builder (script &rarr; fn)</th><th>Seed / key parameters</th><th>Feeds which reported result</th></tr>\n<tr><td>fc_harvest_full.parquet (83,038)</td><td>harvest_full.py &rarr; main</td><td>exhaustive Google Fact Check Tools API pull over 38 sites (NOT the per-publisher scrapers, which are archived)</td><td>root of the fc_gold spine</td></tr>\n<tr><td>fc_gold_v2.parquet</td><td>harmonize_full.py &rarr; harmonise_veracity</td><td>rating &rarr; 1-5 veracity + subtype + NEE, LLM fallback on the unrated tail</td><td>fc_gold headline (&sect;13.1)</td></tr>\n<tr><td>fc_gold_v2_admitted.parquet (47,111)</td><td>build_fc_gold_selection.py &rarr; main</td><td>publisher-admission ruling + (claim_date OR review_date) &ge; 2020</td><td>fc_gold</td></tr>\n<tr><td>fc_gold_v2_clustered.parquet</td><td>fc_claim_cluster.py</td><td>cross-publisher claim clusters (one row/cluster for disjoint folds)</td><td>fc_gold, CAL/VAL</td></tr>\n<tr><td>fc_gold_v3.parquet (47,111 &times; 30)</td><td>enrich_fc_gold_fci.py</td><td>Fact Check Insights join</td><td>fc_gold</td></tr>\n<tr><td>claim_screen / claim_screen_e1</td><td>claim_screen.py, screen_claims.py</td><td>claim_type / topic / mundane + ill-posedness classes</td><td>exclusions, the frozen clean subset</td></tr>\n<tr><td>claim_context_cal, claim dates</td><td>contextualize_claims.py (imports extract_claim_dates.py)</td><td>referent + date resolution (the reported contextualisation/date fields)</td><td>the e1_ctx reads</td></tr>\n<tr><td>judged_axis_llm.parquet</td><td>derive_judged_axis.py</td><td>decisive-proposition axis (7 classes)</td><td>fc_gold judged_axis, folds</td></tr>\n<tr><td>truthodds_cal / val.parquet</td><td>build_calval_splits.py &rarr; strat_sample / hkey</td><td>cluster-disjoint, year-stratified; reproducible blake2b(review_url|SEED) draw</td><td>the E1 draw behind the reads</td></tr>\n<tr><td>exclusions/registry.parquet (1,059)</td><td>build_exclusion_registry.py (+ media_provenance_purge.py)</td><td>every exclusion ruling from seven sources</td><td>population builds</td></tr>\n<tr><td>populations/fc_gold.parquet (3,280)</td><td>freeze_populations.py &rarr; fc_gold</td><td>drop media-axis + mixed-subtype + media-provenance ids; sha256-pins every input</td><td>fc_gold headline, two-urn</td></tr>\n<tr><td>populations/fc_gold_bal3000.parquet (1,500T/1,500F)</td><td>build_fc_gold_bal3000.py &rarr; alloc</td><td>superset of rep1500; +750/+750 stratified by judged_axis&times;veracity, numpy seed 20260916</td><td>the SHIPPED headline_metrics.json (n=3,000)</td></tr>\n<tr><td>populations/fc_gold_rep1500.parquet</td><td>verify_fc_gold_rep1500.py (spec/verifier; no exact builder)</td><td>750T/750F, seed 20260914; the TRUE side reproduces exactly, the FALSE side is not recoverable from the recipe (resolved 2026-09-21)</td><td>prior headline + prodregime + superset base of bal3000</td></tr>\n<tr><td>populations/cn_false.parquet (1,739)</td><td>harvest_community_notes &rarr; cn_dedup &rarr; cn_cluster &rarr; cn_hydrate &rarr; cn_false_urn.py &rarr; draw (SEED 20260826) &rarr; freeze_populations</td><td>helpful-MISINFORMED \"false\" claims; excludes the 200 prompt-A/B posts</td><td>two-urn transfer (false urn)</td></tr>\n<tr><td>populations/x_feed.parquet (1,970)</td><td>ingest_timeline_capture.py &rarr; write_urn &rarr; timeline_urn_run &rarr; freeze_populations</td><td>timeline captures, strict qualify screen (general_pool_screen.call), frame covariate</td><td>two-urn transfer (feed_mixed true urn)</td></tr>\n<tr><td>urn_runs/wire_true (true urn)</td><td>wire_urn_run.py (+ syndication.py, outlet_aliases.py) &rarr; wire_true_reread/wire_true_fit</td><td>byline/origin syndication collapse; reads true_urn_assertions.parquet</td><td>two-urn transfer (wire true urn, &sect;13.3)</td></tr>\n<tr><td>tweet_corpus/true_urn_assertions.parquet</td><td>build_true_urn_assertions.py &rarr; build</td><td>parity screen (assertion &amp; checkworthy &amp; not paired_content) over the cached true_urn_claims_v47 extraction; 768 posts / 1,225 claims (resolved 2026-09-21)</td><td>wire_true</td></tr>\n<tr><td>community_notes/survey_scores_2026-09-17_v5.parquet (1,660)</td><td>select_cn_survey_examples &rarr; key-claim chain &rarr; cn_survey_verify &rarr; cn_survey_score_v5.py</td><td>frozen weights + boundary -4.0115 + true-tail +2</td><td>CN survey result (&sect;13.7, &sect;14)</td></tr>\n<tr><td>urn_runs/averitec_dev (transfer)</td><td>averitec_urn_run.py; re-read by averitec_v7qa_retest.py</td><td>read-v5-only AUC 0.8682 (PINNED); ClaimCheck-loop arm in src/claimverify/</td><td>AVeriTeC transfer (&sect;13.2)</td></tr>\n</table></div>",
+   "subsections": [
+    {
+     "heading": "2b.1 Raw harvest → harmonized veracity",
+     "prose": "harvest_full.py makes one exhaustive Google Fact Check Tools API pull (fc_harvest_full.parquet, 83,038 rows). harmonize_full.py then maps each publisher rating onto the 1–5 veracity scale (with rating_subtype and an NEE tag), the shared rule table living in eval/harmonize.py; the unrated tail gets an LLM fallback.",
+     "excerpts": [
+      {
+       "path": "src/eval/scripts/build_eval/harmonize_full.py",
+       "start": 46,
+       "end": 58,
+       "expect": "harmonise_veracity",
+       "caption": "harmonize_full main(): rating → (veracity 1–5, rating_subtype) via harmonise_veracity, judged_axis_from_rating per row, and the cost estimate for the LLM tail.",
+       "collapsed": false
+      }
+     ]
+    },
+    {
+     "heading": "2b.2 Publisher admission and the ≥2020 window",
+     "prose": "build_fc_gold_selection.py applies Daniel's publisher-admission ruling (a fixed admit list) and keeps only rows dated 2020 or later (claim_date OR review_date), producing fc_gold_v2_admitted.parquet (47,111).",
+     "excerpts": [
+      {
+       "path": "src/eval/scripts/build_eval/build_fc_gold_selection.py",
+       "start": 38,
+       "end": 45,
+       "expect": "2020",
+       "caption": "The admission filter: publisher_site in the admitted set AND (review_date ≥ 2020 OR claim_date ≥ 2020).",
+       "collapsed": false
+      }
+     ]
+    },
+    {
+     "heading": "2b.3 CAL/VAL splits — cluster-disjoint and seeded",
+     "prose": "build_calval_splits.py cuts the CAL/VAL splits from the clustered pool (one row per claim cluster, so the splits are cluster-disjoint by construction). The draw is reproducible from row identity alone: a blake2b hash of (review_url, SEED), immune to upstream sort changes, with explicit leak asserts.",
+     "excerpts": [
+      {
+       "path": "src/eval/scripts/build_eval/build_calval_splits.py",
+       "start": 130,
+       "end": 140,
+       "expect": "blake2b",
+       "caption": "strat_sample's reproducible key: blake2b(review_url|SEED) so a split is a function of row identity, not sort order.",
+       "collapsed": false
+      }
+     ]
+    },
+    {
+     "heading": "2b.4 Freezing the pinned populations",
+     "prose": "freeze_populations.py writes ONE frozen version of each pile (fc_gold, cn_false, x_feed) plus a manifest.json recording every rule chain and the sha256 of every input file. The fc_gold() function drops the media-authenticity axis, mixed-subtype claims, and the media-provenance exclusion ids before pinning fc_gold.parquet (3,280); cn_false() and x_feed() are sibling functions in the same file. Re-running it rewrites the pinned manifest — it is not run casually.",
+     "excerpts": [
+      {
+       "path": "src/eval/scripts/build_eval/freeze_populations.py",
+       "start": 96,
+       "end": 145,
+       "expect": "def fc_gold",
+       "caption": "freeze_populations.fc_gold(): the exclusion chain (media axis → mixed subtype → media-provenance ids) and the pinned write of fc_gold.parquet.",
+       "collapsed": true
+      }
+     ]
+    },
+    {
+     "heading": "2b.5 The balanced fitting slice (bal3000)",
+     "prose": "The SHIPPED headline is fit on fc_gold_bal3000.parquet (1,500 true / 1,500 false). build_fc_gold_bal3000.py supersets the earlier rep1500 verbatim and adds 750+750 more, drawn from the remaining frozen claims stratified by judged_axis_llm × veracity under numpy default_rng seed 20260916.",
+     "excerpts": [
+      {
+       "path": "src/eval/scripts/build_eval/build_fc_gold_bal3000.py",
+       "start": 1,
+       "end": 22,
+       "expect": "seed 20260916",
+       "caption": "The bal3000 spec (module docstring, verbatim): superset of rep1500 + a seed-20260916 axis×veracity-stratified draw. NOTE rep1500 itself has no committed builder (see below).",
+       "collapsed": false
+      }
+     ]
+    },
+    {
+     "heading": "2b.6 The false urn (cn_false)",
+     "prose": "cn_false.parquet is the false side of the two-urn transfer. It is built by the Community-Notes chain (harvest_community_notes → cn_dedup → cn_cluster → cn_hydrate) then cn_false_urn.py, whose draw() locks the band-\"false\" post set (SEED 20260826, excluding the 200 prompt-A/B posts) and runs the production extraction chain; freeze_populations then pins it.",
+     "excerpts": [
+      {
+       "path": "src/eval/scripts/build_eval/cn_false_urn.py",
+       "start": 53,
+       "end": 60,
+       "expect": "def draw",
+       "caption": "cn_false_urn.draw(): the $0 lock of the FALSE-claim post set (SEED 20260826), excluding the c2_ab prompt-A/B posts.",
+       "collapsed": false
+      }
+     ]
+    },
+    {
+     "heading": "2b.7 The true feed urn (x_feed)",
+     "prose": "x_feed.parquet (feed_mixed) is the true/mixed side. ingest_timeline_capture.py lands the X timeline captures, screens them (general_pool_screen.call, strict), extracts and normalizes claims, and write_urn() assembles them into ONE timeline_urn.parquet keyed by post, with a frame covariate separating feed vs search captures; timeline_urn_run scores it and freeze_populations pins x_feed.",
+     "excerpts": [
+      {
+       "path": "src/eval/scripts/claim_sourcing/ingest_timeline_capture.py",
+       "start": 371,
+       "end": 391,
+       "expect": "def write_urn",
+       "caption": "ingest_timeline_capture.write_urn(): assemble every screened+extracted claim into the single timeline_urn.parquet (the x_feed source population).",
+       "collapsed": false
+      }
+     ]
+    }
+   ],
+   "also_relevant": [
+    "BUILDER GAPS (resolved 2026-09-21): populations/fc_gold_rep1500.parquet — a REPORTED dataset (prior shipped headline + prodregime reads) whose original 2026-09-14 build script is gone; its exact ids are NOT recoverable from the recipe (the TRUE half reproduces exactly, the FALSE half sits at the chance floor across 250+ configs), so verify_fc_gold_rep1500.py is a spec/verifier that asserts every invariant rather than an approximate builder. tweet_corpus/true_urn_assertions.parquet — now built by build_true_urn_assertions.py (a deterministic parity screen over the cached true_urn_claims_v47 extraction; the upstream harvest+extraction remains paid). The collaborator Final Instrument page (artifact 54798fdf) now has build_final_instrument_page.py.",
+    "eval_v1.parquet was built by the now-archived enrich_eval.py (which itself has a dead import, eval.enrich); make score reads the frozen eval_v1.parquet, so it does not need the archived scrapers.",
+    "REPO_MAP.md §6–§7 — the full dataset-chain run order; eval/data/fc_gold_lineage.md + fc_gold_v3_provenance.json — the fc_gold row-count/sha ledger."
+   ]
+  },
+  {
+   "id": "3-extraction",
+   "title": "3. Claim extraction",
+   "prose": "This step reads one outlet post at a time and returns the few self-contained claims a fact-checker would actually check (at most three, often one, none when the post makes no checkable central assertion). It is a single LLM pass, not the older extract/normalize/checkworthy chain. Input is the posts JSON (--posts, with an optional --dates parquet supplying each post's date); output is a JSON file carrying the per-post claims plus a flat claims list that is the input contract for the downstream filter/screen/re-query runs. The production prompt is extract-key-v5, run on DeepSeek-V4-Flash at temperature 0, non-thinking, text-only.",
+   "excerpts": [
+    {
+     "path": "src/eval/scripts/build_eval/key_claim_extract.py",
+     "start": 36,
+     "end": 89,
+     "expect": "EXTRACT_SYS = ",
+     "caption": "The extract-key-v3 base prompt (constant EXTRACT_SYS). Production v5 is this exact text with two extra principles inserted; this block is the byte-identical base.",
+     "collapsed": false
+    },
+    {
+     "path": "src/eval/scripts/build_eval/key_claim_extract.py",
+     "start": 193,
+     "end": 223,
+     "expect": "PROMPT_PRODUCTION = PROMPT_V5",
+     "caption": "How the PRODUCTION prompt is built and named: EXTRACT_SYS_V5 = the v3 base with the two _V5_PRINCIPLES paragraphs (prominence/fold + never promote the relayer) spliced in before 'Do not write:'. PROMPT_PRODUCTION = PROMPT_V5, adopted 2026-09-16.",
+     "collapsed": false
+    },
+    {
+     "path": "src/eval/scripts/build_eval/key_claim_extract.py",
+     "start": 226,
+     "end": 257,
+     "expect": "def call",
+     "caption": "The single model call: one pass per post, temperature 0, max_tokens 4000, JSON object response, non-thinking (reasoning_effort only added when 'gpt-oss' in model). Output is capped at 3 claims each tagged assertion|attribution.",
+     "collapsed": false
+    }
+   ],
+   "also_relevant": [
+    "src/eval/scripts/build_eval/key_claim_extract.py:92-191 — EXTRACT_SYS_V4 / extract-key-v4, a longer variant that was tested and REJECTED; kept byte-identical and selectable with --prompt (pointer, not production)",
+    "src/eval/scripts/build_eval/key_claim_extract.py:260-321 — main(): argparse, --dates parquet join, ThreadPoolExecutor(64), progress prints, flat-claims assembly and output write (plumbing, skipped)"
+   ]
+  },
+  {
+   "id": "4-filter-screen",
+   "title": "4. Filter and screen",
+   "prose": "Two further Flash calls run after extraction, each removing or labelling claims. The FILTER rejects malformed or pointless claims; it ships two prompts: filter-key-v1 (retrieval-readiness: is a claim worth searching and well-formed enough to search) which is the CLI default, and filter-survey-v1 (survey-grade: could this be shown to a survey respondent, with a reason code and a fixed-taxonomy subtopic) selected with --prompt. The SCREEN then decides, per kept claim, whether it is US-national-politics/policy in the experiment's form (in_scope) and which side its content favours (lean pro_dem/pro_rep/neutral). Both read the extractor's claims JSON and write per-claim verdict maps; both run DeepSeek-V4-Flash at temperature 0, non-thinking. A claim the model does not rule on is kept (filter) or marked out-of-scope (screen) by default.",
+   "excerpts": [
+    {
+     "path": "src/eval/scripts/build_eval/key_claim_filter.py",
+     "start": 32,
+     "end": 63,
+     "expect": "FILTER_SYS = ",
+     "caption": "filter-key-v1 (constant FILTER_SYS): the retrieval-readiness reject predicate — not self-contained, settled by the post itself, not a fact, empty; keep everything else including claims believed true.",
+     "collapsed": false
+    },
+    {
+     "path": "src/eval/scripts/build_eval/key_claim_filter.py",
+     "start": 73,
+     "end": 158,
+     "expect": "FILTER_SURVEY_SYS = ",
+     "caption": "filter-survey-v1 (constant FILTER_SURVEY_SYS) plus its SUBTOPICS (14) and REASONS (7) taxonomies: the five survey-grade keep tests, one reason code per claim, and a subject-area label for every claim kept or not.",
+     "collapsed": false
+    },
+    {
+     "path": "src/eval/scripts/build_eval/key_claim_filter.py",
+     "start": 163,
+     "end": 205,
+     "expect": "def call",
+     "caption": "Filter model call: temperature 0, max_tokens 1500, JSON object, non-thinking. Builds a numbered [i] claim listing; survey mode also parses reason/subtopic; any claim the model omits is kept by default (setdefault keep=True).",
+     "collapsed": false
+    },
+    {
+     "path": "src/eval/scripts/build_eval/key_claim_screen.py",
+     "start": 35,
+     "end": 103,
+     "expect": "SCREEN_SYS = ",
+     "caption": "screen-key-v1 (constant SCREEN_SYS): SUBJECT (US national politics/policy, with the abroad and crime boundary rules), FORM tests applied to the claim's decisive words, and LEAN (pro_dem/pro_rep/neutral judged on content-if-true).",
+     "collapsed": false
+    },
+    {
+     "path": "src/eval/scripts/build_eval/key_claim_screen.py",
+     "start": 108,
+     "end": 140,
+     "expect": "def call",
+     "caption": "Screen model call: temperature 0, max_tokens 1500, JSON object, non-thinking. Emits in_scope + domain label + lean per claim; a claim not ruled on defaults to out-of-scope, neutral.",
+     "collapsed": false
+    },
+    {
+     "path": "src/eval/scripts/build_eval/key_claim_screen.py",
+     "start": 154,
+     "end": 161,
+     "expect": "keep.get(c[\"claim_id\"]",
+     "caption": "Screen input gating: when --filter is given, only claims the filter marked keep are screened.",
+     "collapsed": true
+    }
+   ],
+   "also_relevant": [
+    "src/eval/scripts/build_eval/key_claim_filter.py:208-259 — filter main(): argparse (--prompt defaults to filter-key-v1), group-by-post, ThreadPoolExecutor(64), output write (plumbing, skipped)",
+    "src/eval/scripts/build_eval/key_claim_screen.py:143-201 — screen main(): argparse, group-by-post, threadpool, lean tally and output write (plumbing, skipped)"
+   ]
+  },
+  {
+   "id": "5-query",
+   "title": "5. Query generation",
+   "prose": "For each claim we write exactly one web search query with an LLM (query-v3). The prompt asks for the single load-bearing proposition, at most ten words, aimed at independent reporting rather than commentary. The query block is the resolved claim plus, when available, a neutral one-line context and the claim date. We never fall back to the raw claim text on failure: a raw-claim query is a different query distribution and would contaminate the measurement.\n\nUnder --fix an attribution variant (query-v3a) keeps the speaker in the query so that 'X said Y' retrieves whether X said it, not whether Y is true. Off by default; on for the survey mid-band runs.",
+   "excerpts": [
+    {
+     "path": "src/eval/scripts/build_eval/evidence_urn_run.py",
+     "start": 102,
+     "end": 108,
+     "expect": "LOAD-BEARING",
+     "caption": "The production query prompt (query-v3), verbatim. One query, ten words, the load-bearing proposition only.",
+     "collapsed": false
+    },
+    {
+     "path": "src/eval/scripts/build_eval/evidence_urn_run.py",
+     "start": 123,
+     "end": 146,
+     "expect": "QUERY_SYS_V3A",
+     "caption": "The query-v3a attribution variant (built by string-substitution from query-v3) and the verb-based test that decides when a claim is an attribution claim.",
+     "collapsed": false
+    },
+    {
+     "path": "src/eval/scripts/build_eval/evidence_urn_run.py",
+     "start": 705,
+     "end": 736,
+     "expect": "query-gen failed after retries",
+     "caption": "How the query block is assembled (claim + context + date) and the three-try loop that raises rather than ever querying the raw claim text.",
+     "collapsed": false
+    }
+   ],
+   "also_relevant": []
+  },
+  {
+   "id": "6-retrieval",
+   "title": "6. Retrieval",
+   "prose": "We send the query to Serper (Google) and keep the top ten results under a date ceiling, with the claim's own origin domain excluded. One search is one request. The date ceiling is the latest date evidence may carry: native claim date, else the extracted utterance date, else review minus one day, and it is hard-clamped to review minus one so the retrieval window can never include the fact-check that produced the gold label. The actual Serper call, scrape and NewsGuard lookup live in src/pipeline/search.py (section on retrieval internals).",
+   "excerpts": [
+    {
+     "path": "src/eval/scripts/build_eval/evidence_urn_run.py",
+     "start": 738,
+     "end": 765,
+     "expect": "date_ceiling=ceil",
+     "caption": "The Serper call inside run_claim: top ten, origin (and any extra origin) excluded, one request, a single 300s cooldown retry. FC domains are TAGGED not blocked.",
+     "collapsed": false
+    },
+    {
+     "path": "src/eval/scripts/build_eval/evidence_urn_run.py",
+     "start": 595,
+     "end": 634,
+     "expect": "def ceiling_for",
+     "caption": "The date-ceiling chain and the review-minus-1 hard clamp that makes answer-key leakage structurally impossible.",
+     "collapsed": false
+    },
+    {
+     "path": "src/eval/scripts/build_eval/evidence_urn_run.py",
+     "start": 572,
+     "end": 592,
+     "expect": "def _xdate_ceiling",
+     "caption": "Expanding a partial extracted date (year, or year-month) to the latest day of its period.",
+     "collapsed": true
+    },
+    {
+     "path": "src/eval/scripts/build_eval/evidence_urn_run.py",
+     "start": 176,
+     "end": 184,
+     "expect": "def _serper_gate",
+     "caption": "Global request pacing for Serper (50 q/s ceiling).",
+     "collapsed": true
+    }
+   ],
+   "also_relevant": [
+    "src/eval/scripts/build_eval/evidence_urn_run.py:271-404 — select_sentences / select_regions: BM25-mass region selection that picks the single best ~2k-token chunk per document (prep-v7, K=1). Long; embedded logic summarised in section 8."
+   ]
+  },
+  {
+   "id": "6-retrieval-internals",
+   "title": "Retrieval internals (search / scrape)",
+   "prose": "`pipeline/search.py` is the single definition of a web search and a document fetch. `search()` dispatches to a per-provider fetcher (production is Serper), caches on a policy-tagged key, and raises SearchError on API failure so a failed call is never mistaken for 'no evidence'. Serper socials are excluded server-side via priority-ordered `-site:` operators capped at 16 (Google silently drops the excess past its ~32-word budget), then the FULL blocklist is enforced client-side as a guaranteed drop; a small caller exclusion (origin outlet) also goes server-side so Google backfills the slot. `scrape()` fetches + Trafilatura-extracts, strips PDFs via pypdf, and on a miss retries high-value domains once through the Jina Reader paywall fallback; content is judged by no_content() (a length-only test let consent/bot walls through). `newsguard_score_map()` loads the domain->score map used by the credibility rerank.",
+   "excerpts": [
+    {
+     "path": "src/pipeline/search.py",
+     "start": 82,
+     "end": 83,
+     "expect": "class SearchError",
+     "caption": "SearchError — an API/HTTP/quota/timeout failure, kept distinct from a genuine 0-results response (which is cached as []).",
+     "collapsed": false
+    },
+    {
+     "path": "src/pipeline/search.py",
+     "start": 49,
+     "end": 79,
+     "expect": "_SOCIAL_PRIORITY",
+     "caption": "The server-side social/UGC exclusion machinery: _SOCIAL_PRIORITY ordered by observed leak frequency, _SITE_OP_BUDGET=16 (Google's -site: cap), the blocklist cache tag, and _SERVER_XD_MAX=3 (max caller domains sent server-side). Documents the E1-pilot leak (8.3% of the urn) that motivated the cap.",
+     "collapsed": false
+    },
+    {
+     "path": "src/pipeline/search.py",
+     "start": 188,
+     "end": 221,
+     "expect": "def search(",
+     "caption": "search(query, top_k, date_ceiling, provider, exclude_domains, min_results): the public entry. Builds the policy-tagged cache key, dispatches to the provider fetcher, caches only on success, tags provenance. date_ceiling = eval-time leakage control (None in production); exclude_domains = the eval-only fact-check block.",
+     "collapsed": false
+    },
+    {
+     "path": "src/pipeline/search.py",
+     "start": 233,
+     "end": 328,
+     "expect": "def serper_payload",
+     "caption": "The Serper primitives (single source of truth, shared with the async SerperPool): serper_payload (q + -site: excludes + tbs date ceiling + page), serper_headers (X-API-KEY), serper_parse (organic -> result dicts, PDFs kept), serper_finalize (client-side full-blocklist drop), serper_merge (page-2 backfill), _drop_domains, and _fetch_serper (page1 -> optional page2 backfill when the FC block starves min_results).",
+     "collapsed": true
+    },
+    {
+     "path": "src/pipeline/search.py",
+     "start": 611,
+     "end": 725,
+     "expect": "def scrape(url",
+     "caption": "scrape(url): Trafilatura extraction with cache; PDF text-strip via pypdf; SCRAPE_BLOCKLIST short-circuit; cache-unpin retries (PDF once, Jina once) for stale None/stub entries; high-value-domain Jina Reader paywall fallback; no_content() content-test so a 200 consent/bot wall is not cached as a hit; per-domain rate-limit wait.",
+     "collapsed": true
+    },
+    {
+     "path": "src/pipeline/search.py",
+     "start": 488,
+     "end": 498,
+     "expect": "def newsguard_score_map",
+     "caption": "newsguard_score_map(): domain -> NewsGuard score (0-100) loaded once from the local (gitignored) parquet; empty dict if absent so nothing crashes. Consumed by verify_tweet_claims.rank_hits / _rel_info.",
+     "collapsed": false
+    }
+   ],
+   "also_relevant": [
+    "src/pipeline/search.py:112-155 — provider pacing (_searxng_pace/_brave_pace) and _request() with backoff on 429/5xx (skip on 400/401/403). Boilerplate-ish, pointered.",
+    "src/pipeline/search.py:158-185 — _tbs_date_ceiling (ISO -> Google tbs custom range) and cache_key (the one place both sync and async paths build their key).",
+    "src/pipeline/search.py:331-439 — the other provider fetchers (_fetch_tavily / _fetch_searxng / _fetch_exa / _fetch_brave); Serper is production, these are the cascade/alternates.",
+    "src/pipeline/search.py:442-594 — the Jina fallback gate: NEWSGUARD_RELIABLE_CUTOFF, THIN_TEXT_CHARS, _JINA_FIRST, _SCIENCE_PUBLISHERS, _is_high_value, _newsguard_reliable, _WALL_PATTERNS, no_content, _scrape_jina, _pdf_text."
+   ]
+  },
+  {
+   "id": "7-evidence-filter",
+   "title": "7. Evidence filtering rules",
+   "prose": "Before a document is read, code decides whether it counts and how. Per result we record its NewsGuard tier, a voice key (so mirrored copies of one story are marked), a mirror flag, whether it is a fact-check domain, and a leak flag (published after the ceiling). Which of these turn into a DROP depends on the mode. On every pinned path all --fix hooks are FALSE, so a leaked document is recorded and still read; under --fix drop_leaks, a post-ceiling document is not read and its slot becomes a padded silence. Undated fact-check pages are never read (date-unjudgeable, verdict-bearing). Claim-level exclusions (media/demonstrative hand-read, unresolvable) are RECORDED with a reason, never silently dropped.",
+   "excerpts": [
+    {
+     "path": "src/eval/scripts/build_eval/evidence_urn_run.py",
+     "start": 767,
+     "end": 798,
+     "expect": "seen_voices",
+     "caption": "Per-result bookkeeping: domain, voice key, mirror, NG tier, fc_domain, leak flag, and the region selection feeding the read.",
+     "collapsed": false
+    },
+    {
+     "path": "src/eval/scripts/build_eval/evidence_urn_run.py",
+     "start": 799,
+     "end": 823,
+     "expect": "post-ceiling-leak",
+     "caption": "The three code-side skip branches: drop-leaks (only under --fix), undated fact-check page, and empty document. Each becomes a first-class non-observation, not a silent gap.",
+     "collapsed": false
+    },
+    {
+     "path": "src/eval/scripts/build_eval/evidence_urn_run.py",
+     "start": 416,
+     "end": 429,
+     "expect": "def _is_leak",
+     "caption": "Parsing Serper's human-format dates to decide if a document postdates the ceiling (unparseable or missing = not a leak).",
+     "collapsed": false
+    },
+    {
+     "path": "src/eval/scripts/build_eval/evidence_urn_run.py",
+     "start": 637,
+     "end": 652,
+     "expect": "def exclusion_for",
+     "caption": "The claim-level exclusion gate: hand-read media/demonstrative calls and unresolvable claims are recorded with a reason, never silenced.",
+     "collapsed": true
+    }
+   ],
+   "also_relevant": [
+    "src/eval/scripts/build_eval/evidence_urn_run.py:110-121 — the FIX dict: every survey mid-band hook (drop_leaks, doc_dates, attr_query, read_asof), all default False so the pinned path is byte-identical."
+   ]
+  },
+  {
+   "id": "7-evidence-internals",
+   "title": "Credibility / domains",
+   "prose": "Source credibility is a transparent, LLM-free domain prior. `pipeline/config.py` holds the retrieval caps (SEARCH_RETRIEVE_K=10, SEARCH_KEEP_K=5, MAX_ROUNDS=4), the ~33-domain UGC SCRAPE_BLOCKLIST (login/UGC only — newspapers/publishers are NOT blocked), and FACT_CHECK_DOMAINS (excluded from retrieval EVAL-ONLY, to measure independent verification). `pipeline/credibility.py` defines TRUSTED_FACTCHECKERS (IFCN-class, international) and is_primary_source (gov-TLD patterns + IGO/stats/court/legislature allowlist — a single primary read can close a claim). The three helpers `evidence_urn_run` imports from `verify_tweet_claims.py` classify each retrieved doc: _domain_of (URL -> bare domain), _voice_key (collapse to one publisher voice so sisters/subdomains never double-count), _rel_info (PRIMARY / RELIABLE+NG / UNRATED / UNRELIABLE, with fact-checkers and Wikipedia as reliable voices).",
+   "excerpts": [
+    {
+     "path": "src/pipeline/config.py",
+     "start": 25,
+     "end": 50,
+     "expect": "SEARCH_RETRIEVE_K",
+     "caption": "Tier-3 retrieval caps: MAX_ROUNDS=4, SEARCH_RETRIEVE_K=10 (do-not-raise: the plan ignores num>10), SEARCH_KEEP_K=5 (kept after credibility rerank), REDUNDANCY_THRESHOLD=0.9, the Serper->Exa provider cascade and per-provider round budget.",
+     "collapsed": false
+    },
+    {
+     "path": "src/pipeline/config.py",
+     "start": 56,
+     "end": 84,
+     "expect": "SCRAPE_BLOCKLIST",
+     "caption": "The UGC-only SCRAPE_BLOCKLIST (~33 domains: social platforms, forums, podcast hosts) — login/UGC walls only; editing it rotates the search cache key by design. Newspapers/paywalled/scientific publishers are deliberately NOT here.",
+     "collapsed": false
+    },
+    {
+     "path": "src/pipeline/config.py",
+     "start": 95,
+     "end": 110,
+     "expect": "FACT_CHECK_DOMAINS",
+     "caption": "FACT_CHECK_DOMAINS: the ~26-domain fact-checker set excluded from search ONLY in the eval that measures verdict-WITHOUT-reading-a-fact-checker. NOT used in production (where finding a fact-check is the point). Starvation triggers page-2 backfill in _fetch_serper.",
+     "collapsed": false
+    },
+    {
+     "path": "src/pipeline/credibility.py",
+     "start": 22,
+     "end": 47,
+     "expect": "TRUSTED_FACTCHECKERS",
+     "caption": "TRUSTED_FACTCHECKERS: internationally-extended IFCN-class fact-checkers (a full read from one counts as a STRONG reliable voice, since NewsGuard's map is US-centric) + is_trusted_factchecker().",
+     "collapsed": false
+    },
+    {
+     "path": "src/pipeline/credibility.py",
+     "start": 113,
+     "end": 162,
+     "expect": "def is_primary_source",
+     "caption": "Primary-source detection: _GOV_SUFFIXES + _GOV_CC regex + PRIMARY_SOURCES allowlist (IGOs, national stats agencies, central banks, courts, legislatures, journals of record) and is_primary_source(). One qualifying primary read can close a claim, so it is deliberately conservative.",
+     "collapsed": true
+    },
+    {
+     "path": "src/pipeline/verify_tweet_claims.py",
+     "start": 188,
+     "end": 190,
+     "expect": "def _domain_of",
+     "caption": "_domain_of(url): regex the host out of a URL, strip www., lowercase.",
+     "collapsed": false
+    },
+    {
+     "path": "src/pipeline/verify_tweet_claims.py",
+     "start": 287,
+     "end": 297,
+     "expect": "def _voice_key",
+     "caption": "_voice_key(dom): collapse a domain to its editorial voice — publisher-family membership first (e.g. the Sun's four domains), else the registrable base (news.yahoo.com -> yahoo.com) — so subdomains/sisters never count as two independent corroborating voices.",
+     "collapsed": false
+    },
+    {
+     "path": "src/pipeline/verify_tweet_claims.py",
+     "start": 307,
+     "end": 325,
+     "expect": "def _rel_info",
+     "caption": "_rel_info(dom, url, scores): the reliability tag for an evidence entry — PRIMARY (gov), RELIABLE (fact-checker=NG_STRONG, or NewsGuard>=60, or Wikipedia=75), UNRATED, or UNRELIABLE (NG<60). Drives the corroboration counting.",
+     "collapsed": false
+    }
+   ],
+   "also_relevant": [
+    "src/pipeline/credibility.py:45-92 — is_trusted_factchecker, the _TRUSTED set + _TRUSTED_TLDS, _domain, tier() (2=trusted/1=default/0=social) and rerank() (drop social, sort by tier, keep top-K).",
+    "src/pipeline/credibility.py:165-184 — _REFERENCE + is_reference(): evergreen/institutional sources exempt from the eval date-ceiling.",
+    "src/pipeline/verify_tweet_claims.py:193-244 — the NewsGuard resolution helpers around _rel_info: NG_ALIASES, _ng_of (alias/prefix/registrable-parent fallback), _source_tier and rank_hits (the read-ordering tier sort). The NewsGuard 'map helper' the brief asked credibility.py for actually lives here (_ng_of) and in search.newsguard_score_map — credibility.py itself has no NewsGuard helper.",
+    "src/pipeline/verify_tweet_claims.py:247-304 — the closure-guard constants (NG_STRONG=90, NG_RELIABLE=60, SUPPORT/REFUTE_STANCES, _PUB_FAMILIES, _OPINION_URL) that the three helpers feed. The full ~1,000-line post-level verify loop below is out of scope for this walkthrough."
+   ]
+  },
+  {
+   "id": "8-reader",
+   "title": "8. The reader: prompt, model, parsing",
+   "prose": "The reader is the heart of the instrument. One LLM call judges one document against one claim and returns JSON: a direction flag, the sentence numbers it relied on, and a reason (only for I). The model is deepseek-ai/DeepSeek-V4-Flash, temperature 0, response forced to a JSON object, with logprobs on so the flag token's confidence is kept as a soft vote. The document is fed as a numbered sentence list so the evidence pointers reconstruct exactly.\n\nThe production reader at this commit is read-v5 (seven flags, READ_SYS_MODE): evidence_urn_run.py sets READ_SYS = READ_SYS_MODE as the default (Daniel 2026-09-21). read-v6.1 (six flags, READ_SYS_V6_1) is the same base rubric with the '3' contested button removed; it is the archived 2026-09-14 experiment, still selectable via --reader read-v6.1. Both are below, verbatim, together with the base rubric and the silver-labeller prompt used to build the doc-level gold. The mode blocks (attribution vs assertion) are defined once in claim_modes.py and imported, but the production read-v5 strips them back out (three successive mode wordings each inverted a stratum; see the file's own comments).",
+   "excerpts": [
+    {
+     "path": "src/eval/scripts/build_eval/read_v5_prompts.py",
+     "start": 23,
+     "end": 72,
+     "expect": "You are reading ONE web document",
+     "caption": "READ_SYS_V5, the base seven-flag rubric with mode placeholders. The flag definitions (5/4/3/X/I/2/1), the precedence rule, the no-circulation rule and the date rule live here.",
+     "collapsed": false
+    },
+    {
+     "path": "src/eval/scripts/build_eval/read_v5_prompts.py",
+     "start": 82,
+     "end": 89,
+     "expect": "READ_SYS_MODE",
+     "caption": "read-v5 production (READ_SYS_MODE): the base rubric with the mode placeholders stripped. This is the seven-flag FROZEN survey reader (hash 92404a300e14).",
+     "collapsed": false
+    },
+    {
+     "path": "src/eval/scripts/build_eval/read_v5_prompts.py",
+     "start": 138,
+     "end": 158,
+     "expect": "READ_SYS_V6_1",
+     "caption": "read-v6.1 (READ_SYS_V6_1): read-v5 with ONLY the '3' contested button removed, nothing added. The six-flag general shipped reader (hash 57d8dbc5df6d) and what the main runner uses.",
+     "collapsed": false
+    },
+    {
+     "path": "src/eval/scripts/build_eval/claim_modes.py",
+     "start": 54,
+     "end": 92,
+     "expect": "MODE_DEFS",
+     "caption": "The mode definitions and per-step rules, defined once so QUERY and READ cannot drift. Imported everywhere, but stripped out of the read-v5 production prompt (see the reverted-to-plain-v5 comment).",
+     "collapsed": true
+    },
+    {
+     "path": "src/eval/scripts/build_eval/read_v5_prompts.py",
+     "start": 212,
+     "end": 262,
+     "expect": "LABELLER_SYS",
+     "caption": "The silver-labeller prompt (Sonnet/Haiku) that builds the doc-level gold used to score readers. Same schema as the reader plus a notes field.",
+     "collapsed": true
+    },
+    {
+     "path": "src/eval/scripts/build_eval/evidence_urn_run.py",
+     "start": 150,
+     "end": 164,
+     "expect": "READERS = {",
+     "caption": "The reader switch. read-v5 (READ_SYS_MODE, seven flags, hash 92404a300e14) is the DEFAULT (the frozen instrument, Daniel 2026-09-21); --reader read-v6.1 selects READ_SYS_V6_1 (the archived six-flag experiment, hash 57d8dbc5df6d). Neither prompt's text changes — the switch only picks which one and restamps READ_PROMPT_V / PROMPT_HASHES.",
+     "collapsed": false
+    },
+    {
+     "path": "src/eval/scripts/build_eval/evidence_urn_run.py",
+     "start": 866,
+     "end": 871,
+     "expect": "--reader",
+     "collapsed": true,
+     "caption": "main()'s --reader argument (choices read-v6.1 / read-v5, default read-v5): it reassigns READ_SYS / READ_PROMPT_V / PROMPT_HASHES. cn_survey_verify.py carries the same switch (reassigning READ_HASH so v5 reads cache separately)."
+    },
+    {
+     "path": "src/eval/scripts/build_eval/evidence_urn_run.py",
+     "start": 486,
+     "end": 514,
+     "expect": "def llm",
+     "caption": "The chat-completions call: model = VERIFICATION_MODEL, temperature 0, JSON-object response, prompt_cache_key for DeepInfra caching, optional logprobs and timing. Returns cost and cached-token counts for the budget meter.",
+     "collapsed": false
+    },
+    {
+     "path": "src/eval/scripts/build_eval/evidence_urn_run.py",
+     "start": 532,
+     "end": 566,
+     "expect": "def read_doc",
+     "caption": "The read itself: format the numbered document, call the model, parse the flag, validate evidence pointers, and the two code coercions (uncited non-I flag -> X; a directional flag citing 90%+ of a long doc gets a blanket-citation marker).",
+     "collapsed": false
+    },
+    {
+     "path": "src/eval/scripts/build_eval/evidence_urn_run.py",
+     "start": 463,
+     "end": 482,
+     "expect": "def _norm_evidence",
+     "caption": "Tolerant parsing of the evidence pointers: flat ids, 'a-b' strings and nested pairs are all accepted (stronger readers answered in these shapes).",
+     "collapsed": true
+    },
+    {
+     "path": "src/eval/scripts/build_eval/evidence_urn_run.py",
+     "start": 517,
+     "end": 529,
+     "expect": "def _flag_logprob",
+     "caption": "Reading the emitted flag token's logprob as a soft per-document vote (fail-open when the provider returns none).",
+     "collapsed": true
+    }
+   ],
+   "also_relevant": [
+    "src/eval/scripts/build_eval/read_v5_prompts.py:91-209 — the non-production reader variants: READ_SYS_ASOF (--read-asof date fix, measured and rejected for the survey run), READ_SYS_V6 (rejected six-flag), READ_SYS_V5B/V5C/V5X (stronger-reader scope-rule ablations). See section 15.",
+    "src/eval/scripts/build_eval/read_v5_prompts.py:264-345 — READ_SYS_ATTRIB: a separate attribution-mode reader, GATED, never wired into the runner.",
+    "src/eval/scripts/build_eval/evidence_urn_run.py:271-404 — select_sentences / select_regions: BM25-mass region selection (prep-v7, K=1) that picks the single best chunk fed to the reader."
+   ]
+  },
+  {
+   "id": "9-flags",
+   "title": "9. From reader output to a document flag",
+   "prose": "A read returns one of the flags in the DIRECTIONS set. When a document is split into more than one region (rare, K=1 by default) the regions are aggregated deterministically: support-and-refute together becomes '3' with a region-conflict marker, otherwise the strongest flag on the winning side. A document whose reads all failed is marked read_status 'failed' so it is excluded from the claim's evidence count at fit time rather than counted as silence.",
+   "excerpts": [
+    {
+     "path": "src/eval/scripts/build_eval/evidence_urn_run.py",
+     "start": 432,
+     "end": 460,
+     "expect": "def aggregate_reads",
+     "caption": "Document-level aggregation across regions: one document becomes one voice; both-sides -> '3'; otherwise the strongest winning-side flag.",
+     "collapsed": false
+    },
+    {
+     "path": "src/eval/scripts/build_eval/evidence_urn_run.py",
+     "start": 824,
+     "end": 854,
+     "expect": "read_status",
+     "caption": "The per-document read loop with its two-try retry, and read_status: a dead read is a first-class non-observation, never counted as silence.",
+     "collapsed": false
+    }
+   ],
+   "also_relevant": [
+    "src/eval/scripts/build_eval/evidence_urn_run.py:157 — the DIRECTIONS set (the valid flag tokens)."
+   ]
+  },
+  {
+   "id": "10-weights-score",
+   "title": "10. Weights and the score",
+   "prose": "Each retrieved document is one voice. The reader emits a flag; each flag carries a fitted log-likelihood-ratio weight w = log( P(flag | claim TRUE) / P(flag | claim FALSE) ), Laplace-smoothed (+1 per flag, +K on each class total). A claim's score is the sum of its documents' flag weights. Every claim is padded to PAD_TO = 10 slots: any slot that returned no read flag (short result list, empty search, dead fetch) counts as a silent document (flag I), so a claim that read nothing stays in as ten silences instead of being dropped. The committed 3-voice urn (fit_urn.fit/score) collapses flags to support / refute / silent; the graded urn (graded_urn.fit_graded/score_graded) keeps one weight per flag — seven (5/4/3/X/I/2/1) or six (--six-flag folds contested 3 into X). Weights are always fitted out-of-fold on the other four of five cluster-disjoint folds. The frozen survey-selection instrument (weights_v5_ceiling_bal3000.json) is exactly this graded fit, read-v5 seven-flag, on the balanced 3,000-claim slice. fit_two_urn is the label-free variant: it never fits on fc-gold, deriving w = log(p_TRUE / p_FALSE) by de-mixing a contaminated timeline urn against a CN-false urn. score_frozen_urn applies pinned ladder weights with no refit.",
+   "excerpts": [
+    {
+     "path": "src/eval/scripts/build_eval/fit_urn.py",
+     "start": 9,
+     "end": 27,
+     "expect": "score = n_t * w_t + n_f * w_f + n_empty * w_e",
+     "caption": "The Truth Odds model: score is the sum of per-voice log-LRs, everything out-of-fold, PAD_TO=10 slot convention (unflagged slots are silent).",
+     "collapsed": false
+    },
+    {
+     "path": "src/eval/scripts/build_eval/fit_urn.py",
+     "start": 69,
+     "end": 87,
+     "expect": "PAD_TO = 10",
+     "caption": "Flag-to-voice map (5/4 support, 1/2 refute, 3/X/I silent), 5 folds, and PAD_TO = 10 slots per claim.",
+     "collapsed": false
+    },
+    {
+     "path": "src/eval/scripts/build_eval/fit_urn.py",
+     "start": 293,
+     "end": 313,
+     "expect": "def score(row: dict",
+     "caption": "3-voice fit: per-voice log-LR with Laplace +1 / +3, and the score = n_t·w_t + n_f·w_f + n_e·w_e.",
+     "collapsed": false
+    },
+    {
+     "path": "src/eval/scripts/build_eval/graded_urn.py",
+     "start": 51,
+     "end": 73,
+     "expect": "def flag_counts",
+     "caption": "The graded flag sets: seven flags (FLAGS7) or six (FLAGS6, contested 3 folded into X by flag_counts).",
+     "collapsed": false
+    },
+    {
+     "path": "src/eval/scripts/build_eval/graded_urn.py",
+     "start": 76,
+     "end": 101,
+     "expect": "def fit_graded",
+     "caption": "Graded fit: one Laplace-smoothed (+1 / +K) log-LR per flag; score_graded sums weight×count; oof_graded refits per fold.",
+     "collapsed": false
+    },
+    {
+     "path": "src/eval/scripts/build_eval/fit_urn.py",
+     "start": 239,
+     "end": 256,
+     "expect": "n_pad = max(0, PAD_TO - returned)",
+     "caption": "The pad-to-ten rule inside load(): missing slots become silent (flag I) documents.",
+     "collapsed": true
+    },
+    {
+     "path": "src/eval/data/urn_runs/e1_ctx/weights_v5_ceiling_bal3000.json",
+     "start": 1,
+     "end": 55,
+     "expect": "bal3000 ceiling refit",
+     "caption": "The FROZEN survey-selection instrument: read-v5 seven-flag weights, boundary -4.0115, fit on the balanced 3,000-claim ceiling-reads slice (AUC 0.8569, recall@2%FPR 0.4167).",
+     "collapsed": false
+    },
+    {
+     "path": "src/eval/scripts/build_eval/fit_two_urn.py",
+     "start": 148,
+     "end": 162,
+     "expect": "def demix_weights",
+     "caption": "Label-free two-urn fit: w = log(p_TRUE / p_FALSE), with p_TRUE de-mixed from the contaminated timeline urn at rate eps (no gold, no refit).",
+     "collapsed": true
+    },
+    {
+     "path": "src/eval/scripts/build_eval/score_frozen_urn.py",
+     "start": 56,
+     "end": 61,
+     "expect": "def score(row: dict, ladder",
+     "caption": "Scoring with pinned weights (no refit): 3-voice and 7-flag scores from a frozen ladder.json.",
+     "collapsed": true
+    },
+    {
+     "path": "src/eval/scripts/build_eval/fit_ceiling_weights.py",
+     "start": 54,
+     "end": 70,
+     "expect": "graded_urn.fit_graded",
+     "collapsed": false,
+     "caption": "fit_ceiling_weights.build: the committed producer of the FROZEN survey weights file weights_v5_ceiling_bal3000.json. It reuses graded_urn.fit_graded / oof_graded and fit_urn.nested_threshold on the read-v5 seven-flag reads over fc_gold_bal3000; the boundary is the mean of the five nested per-fold thresholds (−4.0115). Regenerates the pinned file identically to 1e-9 (AUC 0.8569). Closes the section-15 \"no committed script produces the weights\" gap."
+    }
+   ],
+   "also_relevant": [
+    "src/eval/scripts/build_eval/fit_urn.py:202-291 — load()/load_headline: gold labels (y=1 iff veracity>=4), mixed(3)-as-FALSE-at-eval-but-out-of-fit, media-axis exclusion, cluster folds",
+    "src/eval/scripts/build_eval/fit_urn.py:364-401 — fit_np/oof_np vectorised twins shared by graded_urn / fit_two_urn / prodregime_score",
+    "src/eval/scripts/build_eval/build_fc_gold_bal3000.py:1-179 — builds fc_gold_bal3000.parquet, the balanced 3,000-claim slice the frozen instrument is fit on"
+   ]
+  },
+  {
+   "id": "11-boundary-metrics",
+   "title": "11. The boundary and headline metrics",
+   "prose": "A score becomes flag/pass at a boundary threshold: flag when score <= threshold. The threshold is the NESTED operating point — within each outer fold the threshold is picked to maximise recall at FPR <= 2% on the four training folds' inner out-of-fold scores, applied to the held-out fold, and the reported boundary is the mean of the five per-fold thresholds (the same quantity refit_v7qa.rating_cuts calls cut_1). FPR is over TRUE claims (flagging a true post is the error the product cannot afford). AUC is Mann-Whitney (ties half); CIs are a 2,000-rep cluster bootstrap (resample cluster_id, seed 707). RESOLVED 2026-09-21 (Daniel): the frozen read-v5 seven-flag instrument is now THE shipped tool. headline_metrics.json holds the frozen read-v5 seven-flag fit on fc_gold_bal3000 — AUC 0.8569, boundary -4.0115, recall@2%FPR 0.417 — the same numbers as weights_v5_ceiling_bal3000.json, written by fit_ceiling_weights.py --ship. The earlier general six-flag read-v6.1 fit on fc_gold_rep1500 (AUC 0.8512, boundary -3.5839) is archived as headline_metrics_v61_sixflag_2026-09-21.json. One historical regime remains beside them: survey-SCORING (prodregime_metrics.json conditions.S, boundary -6.7949), the Arm-S six-flag read-v6.1 fit that cn_survey_score.py used for the 2026-09-16 survey run before the read-v5 freeze; the live survey scorer is now cn_survey_score_v5.py, reading the frozen weights file directly.",
+   "excerpts": [
+    {
+     "path": "src/eval/scripts/build_eval/fit_urn.py",
+     "start": 316,
+     "end": 348,
+     "expect": "def recall_at_fpr",
+     "caption": "auc (Mann-Whitney, ties half) and recall_at_fpr: flag = score AT OR BELOW threshold; sweep operating points, take highest recall with FPR (over TRUE claims) within budget.",
+     "collapsed": false
+    },
+    {
+     "path": "src/eval/scripts/build_eval/fit_urn.py",
+     "start": 411,
+     "end": 429,
+     "expect": "def nested_threshold",
+     "caption": "The nested operating point: threshold picked on each fold's inner out-of-fold scores at FPR<=2%, applied to the held-out fold; pooled held-out recall / FPR are the headline.",
+     "collapsed": false
+    },
+    {
+     "path": "src/eval/scripts/build_eval/graded_urn.py",
+     "start": 199,
+     "end": 217,
+     "expect": "threshold_rule",
+     "caption": "ship(): the shipped `overall` cell — threshold = mean of the five nested per-fold thresholds, plus weights, AUC, recall.",
+     "collapsed": true
+    },
+    {
+     "path": "src/eval/data/urn_runs/e1_ctx/headline_metrics.json",
+     "start": 1,
+     "end": 26,
+     "expect": "7-flag graded",
+     "caption": "SHIPPED file provenance (frozen 2026-09-21): seven-flag graded, reader read-v5, fit on fc_gold_bal3000, pad_to 10, cluster folds. Supersedes the six-flag read-v6.1 fit archived as headline_metrics_v61_sixflag_2026-09-21.json.",
+     "collapsed": true
+    },
+    {
+     "path": "src/eval/data/urn_runs/e1_ctx/headline_metrics.json",
+     "start": 53,
+     "end": 131,
+     "expect": "\"auc_oof\": 0.8569157777777778",
+     "caption": "SHIPPED `overall` cell (frozen read-v5 seven-flag): AUC 0.8569 [CI], recall@2%FPR 0.417, boundary -4.0115, seven flag weights (5:+2.90 ... 1:-2.46) with 95% CIs. Same numbers as weights_v5_ceiling_bal3000.json; written by fit_ceiling_weights.py --ship.",
+     "collapsed": false
+    },
+    {
+     "path": "src/eval/data/urn_runs/e1_prodregime/prodregime_metrics.json",
+     "start": 83,
+     "end": 106,
+     "expect": "\"threshold\": -6.794915601938515",
+     "caption": "Arm-S block (survey-SCORING regime): six-flag read-v6.1, AUC 0.9188, boundary -6.7949, weights + flag totals — the file cn_survey_score.py reads.",
+     "collapsed": false
+    },
+    {
+     "path": "src/eval/scripts/build_eval/cn_survey_score.py",
+     "start": 31,
+     "end": 40,
+     "expect": "S_METRICS",
+     "caption": "The consumer: cn_survey_score.py reads conditions.S weights + threshold from prodregime_metrics.json (never retyped).",
+     "collapsed": true
+    }
+   ],
+   "also_relevant": [
+    "src/eval/scripts/build_eval/fit_urn.py:432-447 — nested_fixed: the same nested threshold for FIXED weights (two-urn transfer / frozen scoring)",
+    "src/eval/scripts/build_eval/graded_urn.py:150-223 — full ship() writing headline_metrics.json",
+    "src/eval/scripts/build_eval/prodregime_score.py:242-351 — producer of prodregime_metrics.json (six-flag sixflag path) and of the read-v5 Arm-S bal3000 weights (--mode arm_s_v5)",
+    "src/eval/scripts/build_eval/cn_survey_score.py:83-125 — the survey scoring loop and per-cell flag table (flag when score <= boundary)"
+   ]
+  },
+  {
+   "id": "11-record",
+   "title": "11b. The per-claim output record, field by field",
+   "prose": "Each claim produces one JSON line. The record carries the claim and its gold fields, the resolved claim text and mode, the ceiling and its source, the prompt versions and hashes, and a list of per-result entries (one per retrieved document) each with its domain, voice, NG tier, provenance, dates, leak flag, the sentences shown, and the read. Cost and token counters roll up per claim. Excluded claims carry an 'excluded' reason and empty results. This record is the input the scorers read.",
+   "excerpts": [
+    {
+     "path": "src/eval/scripts/build_eval/evidence_urn_run.py",
+     "start": 679,
+     "end": 703,
+     "expect": "\"review_url\": key",
+     "caption": "The per-claim record skeleton: gold fields, resolved claim, mode, ceiling, prompt versions + hashes, and the counters. Note screen_verdict is a TAG never a skip.",
+     "collapsed": false
+    },
+    {
+     "path": "src/eval/scripts/build_eval/evidence_urn_run.py",
+     "start": 655,
+     "end": 678,
+     "expect": "def run_claim",
+     "caption": "How the record is seeded: the resolved claim is the claim for both query and read, and the shown date follows the same distrust rule as the ceiling.",
+     "collapsed": true
+    }
+   ],
+   "also_relevant": [
+    "src/eval/scripts/build_eval/evidence_urn_run.py:850-969 — main(): the join of CAL + context + resolution + mode + screen, the reproducible sorted-then-seeded draw, resume by review_url, and the ThreadPoolExecutor + budget-abort loop."
+   ]
+  },
+  {
+   "id": "12-concurrency",
+   "title": "12. Concurrency, caching, retries, cost",
+   "prose": "Every paid DeepInfra call in this project goes through one concurrency controller and one cached/retried/swept pass. The in-repo copy lives in reader_lab.py (the reader re-read runner); the same design is packaged as the shared deepinfra_runner tool (a SEPARATE repo at ~/dev/tools/deepinfra, not this codebase), which is now THE runner for new DeepInfra work. RateGate holds a target in-flight, cuts x0.8 to a floor only when the trailing-60s 429 'model busy' rate exceeds 5% (min sample 20, so a single 429 never cuts), and recovers +10% every clean 30s up to the ceiling; per request a 429/5xx/transport failure is retried on the SAME request with jittered backoff (1,2,4,8,16,cap30; 6 attempts) before it is marked read-failed, and an end-of-run sweep (up to 2 passes) re-runs read-failed items so no run ends with silently missing reads. Results are cached per item so a rerun is free; the shared runner adds a hard spend cap priced from a list-price table when the provider omits estimated_cost. reader_lab.py also keeps the older AdaptiveGate (AIMD, per-429 cut) as --legacy-gate.",
+   "excerpts": [
+    {
+     "path": "src/eval/scripts/build_eval/reader_lab.py",
+     "start": 133,
+     "end": 230,
+     "expect": "class RateGate:",
+     "caption": "RateGate: rate-controlled concurrency limiter (target 160 / ceiling 190 per model / floor 32); reacts only to the windowed 429 RATE, cuts x0.8, recovers +10%; injectable clock for offline unit tests.",
+     "collapsed": false,
+     "external": false
+    },
+    {
+     "path": "src/eval/scripts/build_eval/reader_lab.py",
+     "start": 242,
+     "end": 275,
+     "expect": "def gated_post",
+     "caption": "Per-request retry: POST through the gate, retry 429 'model busy'/5xx/transport with jittered exponential backoff (1,2,4,8,16,cap30) x6, then raise so the caller marks the read failed for the sweep.",
+     "collapsed": false,
+     "external": false
+    },
+    {
+     "path": "src/eval/scripts/build_eval/reader_lab.py",
+     "start": 503,
+     "end": 534,
+     "expect": "def ckey",
+     "caption": "Per-(prompt hash, model, claim, rank) JSON cache: ckey hashes the read identity; work() reuses a cached read unless it is a transport-failure, and writes the fresh read to the cache so a rerun costs $0.",
+     "collapsed": false,
+     "external": false
+    },
+    {
+     "path": "src/eval/scripts/build_eval/reader_lab.py",
+     "start": 584,
+     "end": 606,
+     "expect": "FINAL SWEEP",
+     "caption": "End-of-run sweep: delete every read-failed cache entry (transport-exhausted or malformed body, but not max_tokens runaways) and re-run it, up to 2 sweeps.",
+     "collapsed": false,
+     "external": false
+    },
+    {
+     "path": "src/eval/scripts/build_eval/reader_lab.py",
+     "start": 278,
+     "end": 306,
+     "expect": "def emit_observation",
+     "caption": "Per-minute observation line appended to gate_observations.jsonl (target, in-flight, reads/s, 429 count+rate, p50/p95, failed, cuts) so every run doubles as a concurrency probe.",
+     "collapsed": true,
+     "external": false
+    },
+    {
+     "path": "src/eval/scripts/build_eval/reader_lab.py",
+     "start": 556,
+     "end": 577,
+     "expect": "PRE-FLIGHT",
+     "caption": "--preflight: hold 96 in-flight for up to 60s on the first N (cached) units and abort if the 429 rate exceeds 20% before committing the whole run.",
+     "collapsed": true,
+     "external": false
+    },
+    {
+     "path": "src/eval/scripts/build_eval/reader_lab_score.py",
+     "start": 21,
+     "end": 71,
+     "expect": "def report",
+     "caption": "reader_lab_score.py: score a re-read against document-level gold (labels_*.json), reporting exact-flag agreement, polarity agreement, and the two polarity inversions that matter (gold-for read as against, gold-against read as for).",
+     "collapsed": true,
+     "external": false
+    },
+    {
+     "path": "~/dev/tools/deepinfra/src/deepinfra_runner/gate.py",
+     "start": 39,
+     "end": 135,
+     "expect": "class RateGate:",
+     "caption": "Shared tool: RateGate lifted verbatim (same defaults/arithmetic) from reader_lab.py, with an injectable log and the observation writer moved into an Observer class.",
+     "collapsed": true,
+     "external": true
+    },
+    {
+     "path": "~/dev/tools/deepinfra/src/deepinfra_runner/runner.py",
+     "start": 59,
+     "end": 98,
+     "expect": "class Cache:",
+     "caption": "Shared tool: append-only per-item JSONL cache, one {key,item_id,result} line per item, last line wins; terminal failures are NOT cached so the sweep and next run retry them.",
+     "collapsed": false,
+     "external": true
+    },
+    {
+     "path": "~/dev/tools/deepinfra/src/deepinfra_runner/runner.py",
+     "start": 168,
+     "end": 191,
+     "expect": "def gated_post",
+     "caption": "Shared tool: the same per-request retry (429/5xx/transport, jittered 1,2,4,8,16,cap30 backoff, then raise for the sweep).",
+     "collapsed": true,
+     "external": true
+    },
+    {
+     "path": "~/dev/tools/deepinfra/src/deepinfra_runner/runner.py",
+     "start": 193,
+     "end": 238,
+     "expect": "res.cap_hit = True",
+     "caption": "Shared tool: work() applies the hard spend cap (once res.spent >= max_spend no further calls are made), prices each call, treats a malformed parse as a failed item, and writes the parsed result to the cache.",
+     "collapsed": false,
+     "external": true
+    },
+    {
+     "path": "~/dev/tools/deepinfra/src/deepinfra_runner/runner.py",
+     "start": 295,
+     "end": 311,
+     "expect": "no run ends with silently missing",
+     "caption": "Shared tool: end-of-run sweep re-runs every failed (never-cached) item up to `sweeps` passes; spend-cap-skipped items are left alone.",
+     "collapsed": true,
+     "external": true
+    },
+    {
+     "path": "~/dev/tools/deepinfra/src/deepinfra_runner/runner.py",
+     "start": 25,
+     "end": 49,
+     "expect": "MODEL_WORKERS",
+     "caption": "Shared tool: per-model worker override -- big MoE models are throughput-bound, so Qwen3-235B runs at 8 workers, not the 200 default.",
+     "collapsed": true,
+     "external": true
+    },
+    {
+     "path": "~/dev/tools/deepinfra/src/deepinfra_runner/prices.py",
+     "start": 8,
+     "end": 49,
+     "expect": "def cost_of",
+     "caption": "Shared tool: DeepInfra list-price table (prompt/completion $ per 1M) and cost_of() -- the basis of the spend cap when the provider returns no estimated_cost; unknown models fall back to the cheap-instruct tier so the cap still bites.",
+     "collapsed": false,
+     "external": true
+    }
+   ],
+   "also_relevant": [
+    "src/eval/scripts/build_eval/reader_lab.py:402-449 (argparse: --gate-target/-ceiling/-floor/-min-sample, --preflight, --legacy-gate, --cache-only, --max-tokens, --read-timeout -- skipped as boilerplate)",
+    "src/eval/scripts/build_eval/reader_lab.py:89-131 (legacy AdaptiveGate, AIMD per-429 cut; kept as --legacy-gate)",
+    "src/eval/scripts/build_eval/reader_lab.py:318-378 (read_one: builds the read body, thinking/JSON-mode handling, per-call cost)",
+    "~/dev/tools/deepinfra/src/deepinfra_runner/cli.py:59-107 (deepinfra-run --preflight / status / --items driver -- argparse boilerplate)",
+    "~/dev/tools/deepinfra/src/deepinfra_runner/runner.py:328-339 (standalone preflight_probe)",
+    "~/dev/tools/deepinfra/src/deepinfra_runner/transport.py (RequestsTransport, base_url/api_key)"
+   ]
+  },
+  {
+   "id": "13-validation",
+   "title": "13. Validation",
+   "prose": "Seven validation tests exercise the seven-flag evidence-urn instrument. All metric primitives (AUC by Mann-Whitney over out-of-fold scores, recall@2%FPR, the nested operating point, and the cluster bootstrap CI) live once in fit_urn.py and are imported everywhere else -- nothing re-implements the model. Each subsection below embeds the metric-computation core and says where the resulting number is stored on disk. Two provenance facts are load-bearing: (1) the shipped headline_metrics.json is written by graded_urn.py --ship (SEVEN-flag), not by fit_urn.py, which explicitly refuses to overwrite it because it holds the 3-voice constants; (2) two of the tests the brief lists as validation runs -- the read-v5 seven-flag FREEZE rescore of the survey pool and the stronger-reader same-claims AUC comparison -- are NOT committed scripts, they are clog-documented procedures built from committed primitives (reported explicitly below).",
+   "subsections": [
+    {
+     "heading": "13.1 fc_gold 5-fold out-of-fold AUC + nested recall@2%FPR + headline_metrics.json",
+     "prose": "The metric core is in fit_urn.py: recall_at_fpr sweeps every operating point and takes the highest recall inside the FPR budget (FPR measured over gold-TRUE claims); nested_threshold is the honest operating point (per outer fold the threshold is picked on the four training folds' inner out-of-fold scores, applied to the held-out fold, pooled); bootstrap runs the cluster bootstrap (resample cluster_id) beside the old class-stratified row bootstrap, 2000 reps seed 707, folds = 5 by blake2b(cluster_id). graded_urn.py is the SHIPPED driver: fit_graded fits one log-LR weight per reader flag, oof_graded produces the 5-fold oof scores, and ship() writes the seven-flag constants (weights keyed 5/4/3/X/I/2/1, nested threshold = mean of the five per-fold thresholds) to headline_metrics.json. fit_urn.py refuses to write that path (it holds the 3-voice fit).",
+     "excerpts": [
+      {
+       "path": "src/eval/scripts/build_eval/fit_urn.py",
+       "start": 329,
+       "end": 348,
+       "expect": "def recall_at_fpr",
+       "caption": "recall_at_fpr: highest recall whose FPR (over gold-TRUE claims) stays within budget; returns (recall, fpr, threshold).",
+       "collapsed": false,
+       "external": false
+      },
+      {
+       "path": "src/eval/scripts/build_eval/fit_urn.py",
+       "start": 411,
+       "end": 429,
+       "expect": "def nested_threshold",
+       "caption": "nested_threshold: the headline operating point -- per outer fold pick the threshold on the four training folds' inner out-of-fold scores, apply to the held-out fold, pool held-out recall/realised FPR.",
+       "collapsed": false,
+       "external": false
+      },
+      {
+       "path": "src/eval/scripts/build_eval/fit_urn.py",
+       "start": 389,
+       "end": 397,
+       "expect": "def boot_idx",
+       "caption": "boot_idx: one bootstrap draw -- cluster design resamples clusters with replacement (headline); row design resamples within gold class (old).",
+       "collapsed": false,
+       "external": false
+      },
+      {
+       "path": "src/eval/scripts/build_eval/fit_urn.py",
+       "start": 450,
+       "end": 478,
+       "expect": "def bootstrap",
+       "caption": "bootstrap: cluster + row bootstrap side by side on oof AUC and full-fit weights, 95% CIs and the design effect.",
+       "collapsed": true,
+       "external": false
+      },
+      {
+       "path": "src/eval/scripts/build_eval/graded_urn.py",
+       "start": 76,
+       "end": 101,
+       "expect": "def fit_graded",
+       "caption": "fit_graded / oof_graded: one Laplace-smoothed log-LR weight per reader flag (+1 per flag, +7 on totals), 5-fold out-of-fold scoring, mixed claims excluded from the fit.",
+       "collapsed": false,
+       "external": false
+      },
+      {
+       "path": "src/eval/scripts/build_eval/graded_urn.py",
+       "start": 150,
+       "end": 223,
+       "expect": "def ship",
+       "caption": "ship(): write the fitted seven-flag constants to headline_metrics.json (weights per flag, nested threshold = mean of five per-fold thresholds, n/AUC/recall) -- the file every production consumer reads.",
+       "collapsed": true,
+       "external": false
+      },
+      {
+       "path": "src/eval/scripts/build_eval/fit_urn.py",
+       "start": 607,
+       "end": 613,
+       "expect": "refusing to write a 3-voice fit",
+       "caption": "Provenance guard: fit_urn.py refuses to write headline_metrics.json because that path holds the SHIPPED seven-flag constants from graded_urn --ship.",
+       "collapsed": true,
+       "external": false
+      }
+     ],
+     "stored_at": "eval/data/urn_runs/e1_ctx/headline_metrics.json (shipped seven-flag, written by graded_urn.py --ship); sibling eval/data/urn_runs/e1_ctx/graded_metrics_clustered.json (full seven-flag report + figures); eval/data/urn_runs/e1_ctx/headline_metrics_clustered.json (the 3-voice fit written by fit_urn.py -o)"
+    },
+    {
+     "heading": "13.2 AVeriTeC re-read ($0 reproduction of the pinned issue-28 numbers)",
+     "prose": "averitec_v7qa_retest.py reproduces the pinned AVeriTeC-dev transfer AUC to the digit at $0 by scoring from cached reads, then re-runs it on the v7qa re-read of the same stored documents. counts() reads flags out of the cached run (results[].read.direction), optionally substituting a re-read's flag per (claim_id, rank); auc() is a tie-aware Mann-Whitney (positives = gold Supported); threshold_at/row give recall at the claim-level verifier arms' FPRs; boot_ci is a 2000-rep bootstrap at seed 707. Regime (a) applies the frozen fc-gold ladder weights to read-v5 flags and must give 0.8682. As of 2026-09-21 the script also persists its four AUCs to a guarded JSON (--out, default beside the AVeriTeC run) with an in-script pin check.",
+     "excerpts": [
+      {
+       "path": "src/eval/scripts/build_eval/averitec_v7qa_retest.py",
+       "start": 53,
+       "end": 68,
+       "expect": "def counts",
+       "caption": "counts(): re-read the cached AVeriTeC run into per-claim flag counts, substituting a re-read's flag per (claim_id, rank) when a substitution map is given (no stored region -> keep the source flag).",
+       "collapsed": false,
+       "external": false
+      },
+      {
+       "path": "src/eval/scripts/build_eval/averitec_v7qa_retest.py",
+       "start": 76,
+       "end": 99,
+       "expect": "def boot_ci",
+       "caption": "auc (tie-aware Mann-Whitney, positives = gold Supported), threshold_at (largest threshold whose FPR <= target), and boot_ci (2000 reps, seed 707).",
+       "collapsed": false,
+       "external": false
+      },
+      {
+       "path": "src/eval/scripts/build_eval/averitec_v7qa_retest.py",
+       "start": 42,
+       "end": 51,
+       "expect": "BOOT_REPS, BOOT_SEED",
+       "caption": "Pins: gold parquet, cached run and reads, frozen ladder, the two claim-level arm FPRs (all10 0.385 / top3 0.475), bootstrap 2000 reps seed 707, 5 folds.",
+       "collapsed": false,
+       "external": false
+      },
+      {
+       "path": "src/eval/scripts/build_eval/averitec_v7qa_retest.py",
+       "start": 174,
+       "end": 202,
+       "expect": "the pinned procedure",
+       "caption": "The three regimes: (a) frozen read-v5 ladder weights on read-v5 flags (the pinned transfer), (b) v7qa flags under transferred weights with a paired dAUC, (c) an in-sample and 5-fold-oof seven-flag fit on AVeriTeC itself.",
+       "collapsed": true,
+       "external": false
+      }
+     ],
+     "stored_at": "Inputs: eval/data/urn_runs/averitec_dev/scores.jsonl (cached run), eval/data/reader_lab/refit_v7qa/averitec/ (v7qa re-reads), eval/data/urn_runs/e1_ctx/model_ladder/ladder.json (frozen read-v5 ladder weights). The pinned numbers (7-flag transfer AUC 0.8682; v7qa transfer 0.8039; fitted-on-AVeriTeC oof 0.8606 read-v5 / 0.8092 v7qa) are persisted (since 2026-09-21) to a guarded JSON beside the run (--out) with an in-script pin check, and also asserted in GitHub issue #28."
+    },
+    {
+     "heading": "13.3 Two-urn transfer (cn_false vs wire_true)",
+     "prose": "The label-free two-urn de-mix is fit_two_urn.py (fit + transfer_eval7 -- covered by another agent). This subsection covers the transfer TEST harness and where the wire_true-vs-x_feed comparison AUCs live. refit_v7qa.fit_two is the v7qa transfer driver: it de-mixes cn_false (FALSE) against x_feed (TRUE) at each eps and calls f2.transfer_eval7 to score the fixed weights on fc_gold with no refit. wire_true_reread.py first re-reads wire_true's stored documents with the PRODUCTION reader (read-v5 on DeepSeek-V4-Flash) so all three populations share one reader; wire_true_fit.py is the thin read-v5 provisional driver that swaps wire_true in as the TRUE side (with the syndication collapse) and calls the same transfer_eval/transfer_eval7.",
+     "excerpts": [
+      {
+       "path": "src/eval/scripts/build_eval/refit_v7qa.py",
+       "start": 169,
+       "end": 202,
+       "expect": "def fit_two",
+       "caption": "refit_v7qa.fit_two: two-urn de-mix cn_false vs x_feed at each eps, then f2.transfer_eval7 scores the fixed seven-flag weights on fc_gold (transfer, no refit) -- the cell whose auc.point is the x_feed transfer number.",
+       "collapsed": false,
+       "external": false
+      },
+      {
+       "path": "src/eval/scripts/build_eval/wire_true_reread.py",
+       "start": 29,
+       "end": 62,
+       "expect": "def reread",
+       "caption": "wire_true_reread.reread: re-read wire_true's stored sentences with the production reader (evidence_urn_run.read_doc, read-v5 @ Flash) through reader_lab.GATE -- no retrieval, only the read flags change, so all three urns are one-reader comparable.",
+       "collapsed": false,
+       "external": false
+      },
+      {
+       "path": "src/eval/scripts/build_eval/wire_true_fit.py",
+       "start": 61,
+       "end": 90,
+       "expect": "def fit_cell",
+       "caption": "wire_true_fit.fit_cell (read-v5 provisional): de-mix a TRUE side vs cn_false at each eps and call f2.transfer_eval/transfer_eval7 on fc_gold; run for wire_true (eps 0) and x_feed (eps 0/0.10).",
+       "collapsed": true,
+       "external": false
+      }
+     ],
+     "stored_at": "x_feed transfer AUC 0.7872 -> eval/data/populations/refit_results_v7qa.json (cell two_urn_7flag, auc.point at line ~446), written by refit_v7qa.py. wire_true transfer AUC 0.8171 -> eval/data/populations/refit_v7qa_wire_true.json (auc.point at line ~165). read-v5 provisional two-urn transfer -> eval/data/urn_runs/wire_true/fit_provisional.json (written by wire_true_fit.py). The production re-read is eval/data/urn_runs/wire_true/results-00_readv5.jsonl."
+    },
+    {
+     "heading": "13.4 Stronger-reader tests (V4-Pro, Kimi, same-claims AUC)",
+     "prose": "The stronger-reader experiment (\"same claims: none beats Flash\", clog/180926.md 15:05) re-reads fc_gold_sub1000 (500 TRUE / 500 FALSE) with V4-Pro and Kimi-K2.6 under several read prompts, using reader_lab.py's re-read runner (the flags landed in eval/data/reader_lab/sub500/). The Kimi/V4-Pro reads only work because reader_lab.read_one treats those models as thinking models (raise max_tokens, drop forced-JSON so reasoning is not suppressed). The reads are then joined into slim run files by substitute_reader_flags.py and refit per reader on fc_gold via refit_v7qa.py --gold-only (which uses the SAME metric core as 13.1). The cross-reader paired-clustered-bootstrap comparison of same-claims AUC vs Flash (V4-Pro v5 0.851 delta -0.014, Kimi 0.848 delta -0.019, etc.) is NOT a committed script -- it lives in clog/180926.md and a scratch scorer rq_score_v5b.py that is not in the tree (see discrepancies).",
+     "excerpts": [
+      {
+       "path": "src/eval/scripts/build_eval/reader_lab.py",
+       "start": 330,
+       "end": 343,
+       "expect": "thinking_id",
+       "caption": "reader_lab.read_one: the thinking-model handling that makes V4-Pro/Kimi re-reads work -- Kimi/moonshot/gpt-oss/Thinking ids raise max_tokens and skip forced-JSON so reasoning is not truncated to an empty read.",
+       "collapsed": false,
+       "external": false
+      },
+      {
+       "path": "src/eval/scripts/build_eval/refit_v7qa.py",
+       "start": 233,
+       "end": 243,
+       "expect": "gold_only",
+       "caption": "refit_v7qa --gold-only: load the substituted per-reader run file on fc_gold and refit (a) + (c) only, so a reader variant read on fc_gold alone is not mixed with another reader on cn_false/x_feed.",
+       "collapsed": false,
+       "external": false
+      },
+      {
+       "path": "src/eval/scripts/build_eval/substitute_reader_flags.py",
+       "start": 1,
+       "end": 19,
+       "expect": "Substitute a reader_lab re-read",
+       "caption": "substitute_reader_flags.py: join a reader_lab re-read (docs[]={rank,old,new}) into a slim run file at results[].read.direction so the fitting scripts run on a different reader unchanged.",
+       "collapsed": true,
+       "external": false
+      }
+     ],
+     "stored_at": "Reads: eval/data/reader_lab/sub500/ ; population manifest eval/data/populations/fc_gold_sub1000.manifest.json. The same-claims AUC comparison itself is NOT persisted to a committed JSON -- the numbers are recorded in src/clog/180926.md (15:05); per-reader refits go through refit_v7qa.py --gold-only into caller-named JSONs."
+    },
+    {
+     "heading": "13.5 Exa vs Serper retrieval test",
+     "prose": "This is a committed test, not clog-only. prodregime_run.py runs two retrieval arms on the same claims -- Arm S (production Serper query, ceiling off, 10 results) and Arm E (a two-hop Exa neural query, read twice: plain and bridge). prodregime_score.py then scores six conditions (shipped, S, E-plain, E-bridge, U-plain, U-bridge) with the same six-flag urn and a paired clustered bootstrap of dAUC vs S (and vs shipped). cond_dirs is the comparison core: it collects each condition's kept read flags (leak control drops fc_domain and echo docs; the union conditions dedup by URL to <=20).",
+     "excerpts": [
+      {
+       "path": "src/eval/scripts/build_eval/prodregime_score.py",
+       "start": 42,
+       "end": 77,
+       "expect": "def cond_dirs",
+       "caption": "cond_dirs: the read flags each condition contributes per claim after leak control -- Arm S plain, Arm E plain/bridge, and the S union E deduped-by-URL (<=20) conditions.",
+       "collapsed": false,
+       "external": false
+      },
+      {
+       "path": "src/eval/scripts/build_eval/prodregime_score.py",
+       "start": 319,
+       "end": 327,
+       "expect": "dauc_vs_",
+       "caption": "Paired dAUC vs S and vs shipped from the shared cluster-bootstrap draws, with 95% CI -- the Exa-vs-Serper comparison number.",
+       "collapsed": false,
+       "external": false
+      },
+      {
+       "path": "src/eval/scripts/build_eval/prodregime_run.py",
+       "start": 288,
+       "end": 311,
+       "expect": "def serper_fetch",
+       "caption": "prodregime_run: Arm-S Serper fetch (ceiling off, per-claim cached) and the Arm-E Exa fetch -- the two retrieval backends being compared.",
+       "collapsed": true,
+       "external": false
+      }
+     ],
+     "stored_at": "eval/data/urn_runs/e1_prodregime/prodregime_metrics.json (conditions.S / E-plain / E-bridge / U-* with auc_oof, dauc_vs_S, dauc_vs_shipped) and per-condition eval/data/urn_runs/e1_prodregime/cond_<c>.jsonl."
+    },
+    {
+     "heading": "13.6 Production-regime scorer",
+     "prose": "prodregime_score.py is the production-regime scorer: retrieval-bound recall with the date-ceiling OFF and echo/fc-domain leak control ON. _fit_block gives one condition's point estimates + cluster-bootstrap CIs (oof AUC, nested recall@2%FPR, weights, recall curve). The default six-flag mode fits all six conditions and their paired dAUCs; the arm_s_v5 mode fits the Arm-S seven-flag read-v5 urn on a chosen population (e.g. fc_gold_bal3000) with a never-flag-on-silence variant, and writes the production weights file.",
+     "excerpts": [
+      {
+       "path": "src/eval/scripts/build_eval/prodregime_score.py",
+       "start": 114,
+       "end": 141,
+       "expect": "def _fit_block",
+       "caption": "_fit_block: per-condition point estimates + cluster-bootstrap CIs -- oof AUC (fit_urn.oof_np + _auc_np), nested recall@2%FPR, fitted weights, recall-at-FPR curve.",
+       "collapsed": false,
+       "external": false
+      },
+      {
+       "path": "src/eval/scripts/build_eval/prodregime_score.py",
+       "start": 285,
+       "end": 318,
+       "expect": "point estimates per condition",
+       "caption": "Six-condition scoring loop: oof AUC, nested operating point and fitted weights per condition, then a shared-draw cluster bootstrap for weight CIs and per-condition AUC CIs.",
+       "collapsed": false,
+       "external": false
+      },
+      {
+       "path": "src/eval/scripts/build_eval/prodregime_score.py",
+       "start": 144,
+       "end": 224,
+       "expect": "def score_arm_s_v5",
+       "caption": "arm_s_v5 mode: Arm-S seven-flag read-v5 fit on the chosen population (plain + never-flag-on-silence), writing the production weights file weights_v5_production_bal3000.json.",
+       "collapsed": true,
+       "external": false
+      }
+     ],
+     "stored_at": "eval/data/urn_runs/e1_prodregime/prodregime_metrics.json (six-flag conditions), eval/data/urn_runs/e1_prodregime/prodregime_v5_metrics.json + weights_v5_production_bal3000.json (arm_s_v5 mode). NOTE: this writes the *production* weights, not the *ceiling* weights the survey freeze used (see 13.7)."
+    },
+    {
+     "heading": "13.7 Community Notes survey pool test + read-v5 freeze rescore",
+     "prose": "cn_survey_verify.py runs the 1,660 kept survey claims through Arm S of the production regime UNRESTRAINED (date ceiling OFF, fc-domain drop OFF, echo OFF, origin-exclusion ON), reusing the prodregime runner primitives so the instrument is byte-identical to Arm S; only the corpus, leak controls and query source differ. cn_survey_score.py scores that run with the Arm-S SIX-flag urn (weights + boundary READ from prodregime_metrics.json conditions.S, never retyped), pads each claim to 10 slots, flags score <= boundary, and computes AUC against the Community-Notes quasi-label (FALSE = positive, so the discriminant is -score) with a cluster bootstrap by post id.\n\nIMPORTANT -- the read-v5 SEVEN-flag FREEZE rescore is CLOG-ONLY. No committed script reads weights_v5_ceiling_bal3000.json; that filename appears only in clog (170926.md, 180926.md, ROADMAP.md). Per clog/170926.md (15:45), the survey pool was re-read under the frozen read-v5 seven-flag instrument (reusing the prepped docs in cn_survey/results_full.jsonl, no retrieval, into cn_survey/reread_v5/) and then scored with weights_v5_ceiling_bal3000.json + boundary -4.0115, pad-to-10, producing survey_scores_2026-09-17_v5.parquet. The frozen ceiling weights were produced by a scratch script frozen_ceilings_compute.py that is not in the committed tree, and clog/180926.md (line 23) records an OPEN todo to fold those frozen weights/boundary into headline_metrics + the survey scorer. So the committed cn_survey_score.py does the earlier 2026-09-16 six-flag scoring; the seven-flag freeze rescore is an ad hoc procedure over committed primitives.",
+     "excerpts": [
+      {
+       "path": "src/eval/scripts/build_eval/cn_survey_score.py",
+       "start": 38,
+       "end": 75,
+       "expect": "def auc_ci",
+       "caption": "arm_s() reads the six-flag weights + boundary from prodregime_metrics.json conditions.S; flags_of pads to 10 silent slots; auc_ci computes AUC with FALSE as the positive class (discriminant -score) and a cluster bootstrap by post id.",
+       "collapsed": false,
+       "external": false
+      },
+      {
+       "path": "src/eval/scripts/build_eval/cn_survey_score.py",
+       "start": 92,
+       "end": 148,
+       "expect": "score <= THR",
+       "caption": "Main scoring: per-claim score = sum(count x weight), flag when score <= boundary; writes the parquet, then the per-cell (lean x label) table and the AUC-vs-quasi-label table with cluster-bootstrap CIs.",
+       "collapsed": false,
+       "external": false
+      },
+      {
+       "path": "src/eval/scripts/build_eval/cn_survey_verify.py",
+       "start": 246,
+       "end": 292,
+       "expect": "def process_claim",
+       "caption": "cn_survey_verify.process_claim: the unrestrained Arm-S instrument per claim -- generate query, Serper fetch (ceiling off), prep docs, read each prepped doc through the gated production reader with a 2-pass failed-read retry.",
+       "collapsed": true,
+       "external": false
+      }
+     ],
+     "stored_at": "Six-flag (committed) rescore: eval/data/community_notes/survey_scores_2026-09-16.parquet + printed table; run at eval/data/urn_runs/cn_survey/results_full.jsonl. Read-v5 seven-flag FREEZE rescore (clog-only): eval/data/community_notes/survey_scores_2026-09-17_v5.parquet + eval/data/urn_runs/cn_survey/results_full_v5.jsonl, scored with eval/data/urn_runs/e1_prodregime/weights_v5_ceiling_bal3000.json, boundary -4.0115 (procedure in src/clog/170926.md 15:45)."
+    }
+   ]
+  },
+  {
+   "id": "14a-cn-survey-screen",
+   "title": "Survey pool: CN example screen",
+   "prose": "This script picks ~20 text-only, unverified example posts from a Community-Notes-eligible harvest to illustrate the kind of statement the misinformation survey will show. Stage 1 is a $0 pandas rule cascade over the parquet (english, not-reply, not-repost, claim-locus-in-text, impressions at/above the harvest-median, no relative-date leak, not forecast-form, not obvious satire), logging the count after each rule. Stage 2 is one DeepSeek-V4-Flash pass per survivor (cn-survey-screen-v1, workers<=8, temperature 0, non-thinking) returning has_checkable_claim, the decisive proposition, topic, content and author lean, form_ok and sensitivity flags. Selection keeps checkable + form_ok + no sensitivity flag, then ranks by impressions within each content lean (top 10 left, 10 right, 5 neutral, 5 unclear). Input is the eligible-posts parquet; output is a JSON with the funnel, verdicts and the ranked shortlist.",
+   "excerpts": [
+    {
+     "path": "src/eval/scripts/claim_sourcing/select_cn_survey_examples.py",
+     "start": 49,
+     "end": 86,
+     "expect": "def cascade",
+     "caption": "The $0 rule cascade: the stage-1 regex patterns (deictic opener, relative-date leak, forecast, satire), the URL-stripped word count, and cascade() applying each rule in order and recording (rule, remaining). The private-individual screen is a recorded pass-through, enforced later via the model flag.",
+     "collapsed": false
+    },
+    {
+     "path": "src/eval/scripts/claim_sourcing/select_cn_survey_examples.py",
+     "start": 89,
+     "end": 135,
+     "expect": "cn-survey-screen-v1",
+     "caption": "cn-survey-screen-v1 (constant SYS): the one Flash screen prompt — has_checkable_claim, proposition, topic, political_lean_of_post, author_lean_from_description, form_ok, sensitivity — plus the LEANS and _SENS validation sets.",
+     "collapsed": false
+    },
+    {
+     "path": "src/eval/scripts/claim_sourcing/select_cn_survey_examples.py",
+     "start": 139,
+     "end": 176,
+     "expect": "def call",
+     "caption": "The single Flash screen call: temperature 0, max_tokens 700, JSON object, non-thinking; validates lean/sensitivity against the allowed sets. Cost fallback uses Flash pricing (0.09e-6 / 0.18e-6), unlike the extract/filter/screen scripts.",
+     "collapsed": false
+    },
+    {
+     "path": "src/eval/scripts/claim_sourcing/select_cn_survey_examples.py",
+     "start": 225,
+     "end": 241,
+     "expect": "keep checkable + form_ok",
+     "caption": "Selection: keep has_checkable_claim AND form_ok AND no sensitivity flag, then top-k by view_count within each content lean (top 10 left / 10 right / 5 neutral / 5 unclear).",
+     "collapsed": false
+    }
+   ],
+   "also_relevant": [
+    "src/eval/scripts/claim_sourcing/select_cn_survey_examples.py:179-224 — main(): argparse, `assert a.workers <= 8` (references the superseded '64 gate'), threadpool over survivors, progress prints (plumbing, skipped)",
+    "src/eval/scripts/claim_sourcing/select_cn_survey_examples.py:243-251 — result assembly and output write (funnel, spend, shortlist), skipped"
+   ]
+  },
+  {
+   "id": "14-selection",
+   "title": "14. Survey pool scoring and selection",
+   "prose": "Two scripts turn per-claim urn flag counts into a rated, selectable survey pool. score_midband.py is the pure-scoring predecessor: it reads the pinned seven-flag weights, sums them into a per-claim log-odds, and cuts each claim into a survey class (1 / 2 / middle / supported). select_midband.py is the canonical/live script: it does everything score_midband does and adds the W=7 variant-A SELECTION floor on top (a refuting flag on a document published more than 7 days before the post is demoted to X), so it is a strict superset. select_midband --no-floor reproduces score_midband exactly, and both write the same schema, so the report reader takes either. The four mid-band rating cuts are PINNED read-v5 constants (DeepSeek-V4-Flash reader, fit cell graded_urn_7flag), not part of the refit file; the weights ARE read from populations/refit_results.json. The floor is a selection filter over the pinned instrument, not a re-fit of it.",
+   "excerpts": [
+    {
+     "path": "src/eval/scripts/build_eval/score_midband.py",
+     "start": 1,
+     "end": 23,
+     "expect": "graded_urn_7flag",
+     "caption": "score_midband header: weights come from the pinned refit cell graded_urn_7flag (read-v5 on DeepSeek-V4-Flash); the four cuts are pinned constants, not in the refit file; a post's rating is the MIN over its kept key claims.",
+     "collapsed": true
+    },
+    {
+     "path": "src/eval/scripts/build_eval/score_midband.py",
+     "start": 37,
+     "end": 52,
+     "expect": "PINNED_CUTS",
+     "caption": "The four pinned read-v5 cut constants (-4.079 / -2.075 / +0.034 / +5.560) and the class-assignment rule rate(): score <= cut_1 -> class 1, <= cut_2 -> class 2, > cut_5 -> supported, else middle (discarded).",
+     "collapsed": false
+    },
+    {
+     "path": "src/eval/scripts/build_eval/score_midband.py",
+     "start": 67,
+     "end": 95,
+     "expect": "graded_urn_7flag",
+     "caption": "Weights W are read from the refit cell graded_urn_7flag; --cuts-from can override the pinned cuts from a refit's rating_cuts block. Each claim is scored with graded_urn.score_graded(r, W) and rated; n_docs = 10 - I recovers the read documents from the pad-to-ten silences.",
+     "collapsed": false
+    },
+    {
+     "path": "src/eval/scripts/build_eval/graded_urn.py",
+     "start": 67,
+     "end": 91,
+     "expect": "def score_graded",
+     "caption": "The score itself: score_graded is the dot product sum(w[k] * n) of each flag's fitted weight against its document count over the active seven-flag set (5,4,3,X,I,2,1). Pad-to-ten enters as extra I (silence) counts upstream.",
+     "collapsed": false
+    },
+    {
+     "path": "src/eval/scripts/build_eval/score_midband.py",
+     "start": 103,
+     "end": 120,
+     "expect": "worst = min(cs",
+     "caption": "Post rating = MIN over the post's kept key claims: worst = min by (class rank, score), so the post inherits its most-refuted claim's class and driving claim.",
+     "collapsed": false
+    },
+    {
+     "path": "src/eval/scripts/build_eval/select_midband.py",
+     "start": 1,
+     "end": 23,
+     "expect": "--no-floor` reproduces",
+     "caption": "select_midband header: score_midband plus the W=7 variant-A floor and two extra fields; weights are NOT refitted (a selection filter, not an instrument change). --no-floor reproduces score_midband exactly and must give back the 11:58 lean x class table.",
+     "collapsed": true
+    },
+    {
+     "path": "src/eval/scripts/build_eval/select_midband.py",
+     "start": 39,
+     "end": 55,
+     "expect": "FLOOR_W = 7",
+     "caption": "Same pinned read-v5 cut constants as score_midband, plus FLOOR_W = 7 (days) and PAD_TO from fit_urn; rate() is identical to score_midband's class-assignment.",
+     "collapsed": false
+    },
+    {
+     "path": "src/eval/scripts/build_eval/select_midband.py",
+     "start": 58,
+     "end": 78,
+     "expect": "def _rel_date",
+     "caption": "Date parsing for the floor: _doc_date reads Serper's absolute date; _rel_date parses relative Serper dates ('1 day ago') against the crawl date (behind --rel-leak, default OFF) since 127 mid-band relative-dated documents all resolve past the post's ceiling.",
+     "collapsed": true
+    },
+    {
+     "path": "src/eval/scripts/build_eval/select_midband.py",
+     "start": 88,
+     "end": 111,
+     "expect": "direction = \"X\"",
+     "caption": "counts(): the W=7 floor remap. A refuting flag ('1' or '2') on a document dated more than floor_w days before the claim is remapped to X (silenced); the optional relative-date leak drop removes post-ceiling documents as pad silences; pad-to-PAD_TO tops up I.",
+     "collapsed": false
+    },
+    {
+     "path": "src/eval/scripts/build_eval/select_midband.py",
+     "start": 120,
+     "end": 132,
+     "expect": "--no-floor",
+     "caption": "The switches: --floor-w (default 7), --no-floor (floor_w=None -> reproduces score_midband), --rel-leak with --crawl-date (enables the relative-date leak drop).",
+     "collapsed": false
+    },
+    {
+     "path": "src/eval/scripts/build_eval/select_midband.py",
+     "start": 185,
+     "end": 200,
+     "expect": "\"audit\": \"\"",
+     "caption": "Post rollup with the two extra selection fields: same MIN-over-claims worst-claim logic, plus per-post floor_silenced (sum of demoted documents) and an empty audit field for hand review.",
+     "collapsed": true
+    },
+    {
+     "path": "src/eval/scripts/build_eval/cn_survey_score_v5.py",
+     "start": 49,
+     "end": 52,
+     "expect": "def load_weights",
+     "collapsed": false,
+     "caption": "cn_survey_score_v5: the committed SEVEN-flag survey scorer. It reads weights + boundary from weights_v5_ceiling_bal3000.json (never retyped) and flags a claim when its padded seven-flag score ≤ −4.0115, joining the read-v5 re-read onto the dossiers. Reproduces the pinned survey_scores_2026-09-17_v5.parquet exactly (245 flagged, AUC 0.6230). The older cn_survey_score.py is the six-flag Arm-S scorer (boundary −6.7949)."
+    }
+   ],
+   "also_relevant": [
+    "src/eval/scripts/build_eval/score_midband.py:55-65 and select_midband.py:114-146 - argparse/IO/print boilerplate (run, candidates, refit, out paths, per-lean x class print table); skipped.",
+    "src/eval/scripts/build_eval/score_midband.py:122-140 and select_midband.py:203-234 - JSON writeout of midband_scored.json / midband_selection.json and the by-lean and by-content-lean summary tables; IO, skipped.",
+    "src/eval/scripts/build_eval/graded_urn.py:51-53 - FLAGS = FLAGS7 = (5,4,3,X,I,2,1); --six-flag would switch to FLAGS6, but these scripts use the seven-flag default.",
+    "src/eval/scripts/build_eval/fit_two_urn.py:86-114 - load_urn (used by score_midband) applies the same pad-to-PAD_TO silence rule that counts() re-implements in select_midband.",
+    "src/eval/scripts/build_eval/fit_urn.py:82 - PAD_TO = 10 (the pad-to-ten slot count).",
+    "eval/data/populations/refit_results.json - source of the seven-flag weights (cells[].variant == 'graded_urn_7flag'); an optional rating_cuts block there can override the pinned cuts via --cuts-from."
+   ]
+  },
+  {
+   "id": "15-questions",
+   "title": "15. Things a careful reader should question",
+   "prose": "This is the section to read before spending money. It collects every place where the code, the daily logs, and the frozen-state description disagree, every constant with no recorded justification, and every step that exists only in a log or a scratch file and not in committed code. It is assembled from reading the code at this commit; where the code and the notes disagree, the code is taken as ground truth.",
+   "subsections": [
+    {
+     "heading": "15.1 There are three instrument files, not one",
+     "prose": "RESOLVED 2026-09-21 (Daniel): the frozen read-v5 seven-flag instrument is now THE shipped tool, and headline_metrics.json holds it. Historically the word \"instrument\" pointed at three fitted files; two remain relevant and one is archived. Do not mix their numbers.\n\n- SHIPPED instrument (frozen 2026-09-21): eval/data/urn_runs/e1_ctx/headline_metrics.json. Reader read-v5 (SEVEN flags: 5,4,3,X,I,2,1). Fitted on fc_gold_bal3000 (3,000 balanced). oof AUC 0.8569, recall@2%FPR 41.7%, boundary -4.0115. Same numbers as weights_v5_ceiling_bal3000.json (the flat weights file the survey pool is scored under); written by fit_ceiling_weights.py --ship. This is what evidence_urn_run.py defaults to (--reader read-v5) and what the freeze in HUB.md / ROADMAP describes.\n- ARCHIVED six-flag experiment: eval/data/urn_runs/e1_ctx/headline_metrics_v61_sixflag_2026-09-21.json. Reader read-v6.1 (SIX flags). Fitted on fc_gold_rep1500 (1,500 balanced). oof AUC 0.8512, recall@2%FPR 41.5%, boundary -3.5839. The 2026-09-14 shipped fit, superseded by the read-v5 freeze; still selectable via --reader read-v6.1.\n- Survey-scoring Arm-S instrument: eval/data/urn_runs/e1_prodregime/prodregime_metrics.json condition S. Reader read-v6.1 (six flags), retrieval date-ceiling OFF. AUC 0.9188, boundary -6.7949. This is what scored the survey pool on 2026-09-16 (cn_survey_score.py -> survey_scores_2026-09-16.parquet) BEFORE the read-v5 freeze; the live survey scorer is now cn_survey_score_v5.py (seven-flag, reads the frozen weights file, boundary -4.0115).\n\nSo the survey pool was first scored under the six-flag Arm-S file (-6.7949), then re-scored under the seven-flag freeze (-4.0115), which is now the shipped instrument. Which reader runs is a committed switch — evidence_urn_run.py and cn_survey_verify.py take --reader {read-v6.1, read-v5} (default read-v5).",
+     "excerpts": [
+      {
+       "path": "src/eval/scripts/build_eval/evidence_urn_run.py",
+       "start": 63,
+       "end": 82,
+       "expect": "READ_PROMPT_V = \"read-v5\"",
+       "caption": "The runner's own version constants: read-v5 (seven-flag, frozen 2026-09-21) is the production reader here, with the read-v6.1 experiment selectable via --reader. This is where the six-flag/seven-flag split is decided in code.",
+       "collapsed": false
+      }
+     ]
+    },
+    {
+     "heading": "15.2 The freeze is not yet written into committed code",
+     "prose": "**RESOLVED 2026-09-21 (see 15.7): the freeze is now fully in committed code — producer, scorer, reader switch, AND the write into headline_metrics.json.** ROADMAP's former top open item, \"write frozen weights + boundary into headline_metrics.json,\" is done: fit_ceiling_weights.py --ship writes the frozen read-v5 seven-flag fit into headline_metrics.json (gate: equal to the weights file to 1e-9). What was open at the 2026-09-18 freeze and is now closed:\n\n- weights_v5_ceiling_bal3000.json now has a committed PRODUCER, fit_ceiling_weights.py (reuses graded_urn's seven-flag fit + fit_urn.nested_threshold on the read-v5 reads over fc_gold_bal3000); it regenerates the file identically.\n- The survey-selection SCORER that applies boundary -4.0115 (score <= -4.0115 = false, score > +2 = true) is now committed as cn_survey_score_v5.py.\n- The read-v5 seven-flag RE-SCORE of the 1,660-claim survey pool (survey_scores_2026-09-17_v5.parquet) is reproduced exactly by cn_survey_score_v5.py from the cached read-v5 reads.\n\nConsequence: a fresh clone regenerates the frozen survey numbers from committed code (given the gitignored cached read files). The only remaining survey-scorer note is the four-cut PolitiFact-style rating scale in the historical mid-band scripts (see 15.4) — the frozen instrument itself pins one boundary; the live survey scorer uses that boundary plus the +2 true-tail.",
+     "excerpts": []
+    },
+    {
+     "heading": "15.3 Dead, superseded, or gated code that can look live",
+     "prose": "- read_v5_prompts.py ships ten reader prompt constants. Only two are production paths: READ_SYS_MODE (read-v5, the frozen survey reader) and READ_SYS_V6_1 (read-v6.1, the shipped reader). READ_SYS_V6 was measured and rejected; READ_SYS_ASOF, READ_SYS_V5B, READ_SYS_V5C and READ_SYS_V5X are date/scope-rule ablations from the stronger-reader work; none is wired into a production run.\n- READ_SYS_ATTRIB is a full attribution-mode reader prompt, but its own comment says it is GATED and never wired in: the runner routes every mode to READ_SYS_MODE.\n- claim_modes.py defines the attribution/assertion mode blocks and read_v5_prompts imports them, but the production read-v5 (READ_SYS_MODE) strips them back out. The mode text ships and is imported yet does not reach the production reader.\n- score_midband.py PINNED_CUTS carries cut_4 = 0.034, but rate() only uses cut_1 / cut_2 / cut_5, so cut_4 is dormant.\n- Two concurrency gates coexist in reader_lab.py: the settled RateGate and the legacy AdaptiveGate (--legacy-gate). wire_true_reread.py still drives the legacy one.\n- src/CLAUDE.md's Tier-3 section documents the ARCHIVED per-claim verify.py (top-3 retrieval); the live path is verify_tweet_claims.py plus evidence_urn_run.py at K=10 / keep=5. The doc carries its own note about this.\n\nUpdate 2026-09-21: READ_SYS_MODE (read-v5) and READ_SYS_V6_1 (read-v6.1) are now both reachable through the --reader switch; the other prompt constants remain non-production.",
+     "excerpts": []
+    },
+    {
+     "heading": "15.4 Hard-coded constants worth a second look",
+     "prose": "- The reader sees exactly one region per document: MAX_REGIONS = 1 in evidence_urn_run.py, with MAX_SENT_CHARS = 800, MAX_SENTS = 50, REGION_CHARS = 8000. These decide what text the reader ever sees; they are justified in July-2026 in-file comments but live in no config file.\n- The mid-band rating cuts (-4.079 / -2.075 / +0.034 / +5.560) are hard-coded PINNED_CUTS in score_midband.py and select_midband.py and are read-v5 seven-flag cuts; the docstrings note they are not stored in refit_results.json.\n- The W=7 selection floor (FLOOR_W = 7 days) in select_midband.py remaps an old refuting document to silence; it is a selection filter over the pinned instrument, not a refit, and its true-positive cost on the mid-band is recorded as unmeasured.\n- The retrieval fitting used the eval-only date ceiling ON (\"ceiling\" in the weights filename), which blocks future-evidence leakage but is not the production regime; Arm-S turns it off. The gap between the two (0.85 with ceiling vs 0.92 without) is retrieval-bound recall, not a reader change.\n- key_claim_extract / _filter / _screen hand-roll a ThreadPoolExecutor at 64 workers with their own 429 backoff, rather than the shared reader_lab RateGate (ceiling 200); 64 is the superseded cap.",
+     "excerpts": []
+    },
+    {
+     "heading": "15.5 Steps that live only in logs or scratch, not committed code",
+     "prose": "**RESOLVED 2026-09-21 (see 15.7): frozen_ceilings_compute.py, rq_score_v5b.py and the read-v5 survey re-score are now committed.** - frozen_ceilings_compute.py (produced the frozen survey weights) — not in the tree.\n- The read-v5 seven-flag survey-pool re-score end to end — clog-only; no committed driver.\n- rq_score_v5b.py (the stronger-reader same-claims AUC comparison) — scratch, not committed.\n- refit_v7qa_wire_true.json (the wire_true two-urn transfer AUC 0.8171) — RESOLVED 2026-09-21: refit_v7qa.py gained --true-file / --true-population, so the wire_true variant is a documented committed invocation that reproduces the file exactly.\n- averitec_v7qa_retest.py — RESOLVED 2026-09-21: it now persists its four AUCs (0.8682 / 0.8039 / 0.8606 / 0.8092) to a guarded JSON (--out, default beside the AVeriTeC run) with an in-script pin check, instead of only printing.",
+     "excerpts": []
+    },
+    {
+     "heading": "15.6 Smaller mismatches between code and its description",
+     "prose": "- The fit is a per-flag Laplace-smoothed log-likelihood-ratio, not logistic regression. A methods writer should not describe it as a logistic model: the weights are closed-form log-ratios of class-conditional flag rates (+1 per flag smoothing), and the \"design matrix\" is per-flag document counts.\n- graded_urn.py --ship's docstring says seven-flag; the shipped headline_metrics.json is again seven-flag as of 2026-09-21 (the frozen read-v5 fit, written by fit_ceiling_weights.py --ship). The six-flag file it briefly shipped (2026-09-14) is archived as headline_metrics_v61_sixflag_2026-09-21.json.\n- extract / filter / screen default their --model to openai/gpt-oss-120b, while the docstrings and production say deepseek-ai/DeepSeek-V4-Flash; the defaults do not run the production model.\n- key_claim_filter.py defaults --prompt to filter-key-v1; the survey-grade filter-survey-v1 needs an explicit flag, so the survey chain is not the argparse default.\n- key_claim_screen.py has no band-threshold code; \"low band\" / \"mid band\" is only input-file naming, not a computed cut.\n- fc_gold_rep1500.parquet is an ids-only slice (1,500 x 1) joined back to fc_gold.parquet; the NewsGuard-map helper the brief expected in credibility.py does not exist there (the loader is search.newsguard_score_map).\n- The prompt_hash stamped in run records ties a run to exact prompt bytes: read-v5 = 92404a300e14, read-v6.1 = 57d8dbc5df6d, query-v3 = 602caa42bd95. Use these to tell which reader produced a given results file."
+    },
+    {
+     "heading": "15.7 Resolved 2026-09-21 (committed)",
+     "prose": "The 2026-09-18 freeze is now reproducible from committed code. Everything below runs at $0 on cached reads; each was gate-checked against the pinned artifact before commit.\n\n- **Frozen survey weights + boundary now have a committed producer.** `fit_ceiling_weights.py` regenerates `weights_v5_ceiling_bal3000.json` identically (float tol 1e-9): oof AUC 0.8569, boundary −4.0115. Reuses graded_urn's seven-flag fit + fit_urn.nested_threshold. `uv run python -m eval.scripts.build_eval.fit_ceiling_weights --out /tmp/w.json`.\n- **The read-v5 seven-flag survey re-score now has a committed scorer.** `cn_survey_score_v5.py` reproduces `survey_scores_2026-09-17_v5.parquet` exactly (245 flagged, AUC 0.6230) by applying the frozen weights + −4.0115 to the cached read-v5 reads. (cn_survey_score.py stays the six-flag Arm-S scorer.) `uv run python -m eval.scripts.build_eval.cn_survey_score_v5 --out /tmp/s.parquet`.\n- **read-v5 is the DEFAULT reader in committed code, and the freeze is written into headline_metrics.json.** evidence_urn_run.py and cn_survey_verify.py take `--reader {read-v6.1, read-v5}` (default now read-v5, hash 92404a300e14; read-v6.1 = 57d8dbc5df6d stays selectable). The prompt text is byte-for-byte unchanged. `fit_ceiling_weights.py --ship` writes the frozen read-v5 seven-flag fit into headline_metrics.json in the consumers' `overall` schema (gate: equal to weights_v5_ceiling_bal3000.json to 1e-9); the prior six-flag file is archived as headline_metrics_v61_sixflag_2026-09-21.json. Refuse-to-overwrite guards added to fit_ceiling_weights / cn_survey_score_v5 / frozen_ceilings / stronger_reader_scores (bare run cannot clobber a pinned frozen output; --force overrides).\n- **The ceiling / stronger-reader analyses are committed.** `frozen_ceilings.py` (reader/retrieval ceilings; reproduces train 0.8569/0.4167, prod 0.9266/0.372) and `stronger_reader_scores.py` (stronger-reader same-claims comparison) replace the scratch frozen_ceilings_compute.py / rq_score_v5b.py, with the shared doc loader `reader_error_lib.py` and the reader-error counterfactual `reader_error_counterfactual.py`. Fixtures blind120_summary.json / rq_idmap.json / rq_claims_sub.json are committed under eval/data/.\n\n- **The freeze is written into headline_metrics.json (2026-09-21).** `fit_ceiling_weights.py --ship` writes the frozen read-v5 seven-flag fit (weights, boundary -4.0115, AUC 0.8569, recall 0.4167, CI, n 3000, read hash 92404a300e14) into headline_metrics.json in the consumers' `overall` schema; the six-flag read-v6.1 fit is archived as headline_metrics_v61_sixflag_2026-09-21.json. Gate: every shipped field equals weights_v5_ceiling_bal3000.json to 1e-9. Regenerate with `fit_ceiling_weights --ship --force`.\n\nSTILL OPEN (Daniel's call, ROADMAP): the four-cut PolitiFact-style rating scale (PINNED_CUTS) lives only in the historical mid-band outlet-pool scripts (select_midband / score_midband); the frozen bal3000 instrument pins one boundary, so if those scripts are kept live their cut_2/cut_4/cut_5 would need a fresh bal3000 fit. See section 15.4."
+    }
+   ]
+  }
+ ]
+}

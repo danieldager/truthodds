@@ -1,0 +1,17 @@
+{
+ "seed": 404,
+ "built": "2026-07-24",
+ "screen_prompt": "screen-v1",
+ "screen_model": "Qwen/Qwen3-235B-A22B-Instruct-2507",
+ "remaps": {
+  "r1_outdated": 50,
+  "r2_negatives": 1,
+  "r3_title_demotion": 0
+ },
+ "exclusions": [
+  "mundane",
+  "claim_type==media_authenticity"
+ ],
+ "cal": 9406,
+ "val": 2900
+}

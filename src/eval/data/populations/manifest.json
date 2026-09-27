@@ -1,0 +1,105 @@
+{
+ "built": "2026-09-08T13:18:50+00:00",
+ "git_rev": "6c688568f9eb66547653d0de8fa24c515b948315",
+ "pad_to": 10,
+ "populations": {
+  "fc_gold.parquet": {
+   "rows": 3280,
+   "rules": [
+    "E1 draw, urn_runs/e1_ctx/results-00.jsonl (4,157 scored rows)",
+    "keep veracity in 1..5",
+    "minus hand-gated claims, screen_verdict == unscreened (37)",
+    "zero-doc claims KEPT (85); fit_urn pads every claim to 10 slots with silent documents \u2014 the zero-doc rule is retired (Daniel 2026-09-08)",
+    "cluster_id joined from fc_gold_v3.parquet on review_url",
+    "minus judged_axis_llm == media_authenticity (346)",
+    "minus rating_subtype == mixed (431)",
+    "minus e1_ctx/media_provenance_exclusions.json, excluded=true (63)"
+   ],
+   "inputs": {
+    "eval/data/urn_runs/e1_ctx/results-00.jsonl": "36f1c013fa6a2df00c2a43c42e5d3208511e81e4bbdd6111cc3f5f1d654fff01",
+    "eval/data/judged_axis_llm.parquet": "836990f9ba40866fd88eb9b5ecff58349f4240b82e4d91f32ec555a5d7705978",
+    "eval/data/fc_gold_v3.parquet": "026cfea9ca66e943aaf237eab11f0b2dc5324253f3e32fe8877d9293c28c34cb",
+    "eval/data/urn_runs/e1_ctx/media_provenance_exclusions.json": "470cbde740dba988008914514c5ee43ec8d9465f1f55e14bb86430406447952e"
+   }
+  },
+  "fc_gold_rep1500.parquet": {
+   "rows": 1500,
+   "rules": [
+    "seeded (numpy default_rng seed 20260914), BALANCED true/false draw of 1,500 claims (750 true / 750 false) STRATIFIED by judged_axis_llm and veracity",
+    "source population = frozen fc_gold.parquet (3,280) minus 44 claim-shape failures (resolution_status in {needs-article, self-attributed} + claim_screen_unresolved_referent + claim_screen_misattributed_media + claim_screen_media_locus) = 3,236 (T 1,534 / F 1,587 / mid veracity-3 115); NO attribution/graded-rating filters -> representative of the full corpus difficulty, not the best-case slice",
+    "true = veracity in {4,5}, false = veracity in {1,2}; veracity-3 (unprovable) excluded by the T/F requirement",
+    "every source cluster is a singleton, so the draw is cluster-disjoint by construction and respects graded_urn 5-fold cluster_id folds",
+    "composition: veracity 1:715 2:35 4:130 5:620; axis event_occurrence 530 (35.3%) quote_attribution 358 (23.9%) statistic_figure 301 (20.1%) policy_law 178 (11.9%) causal_effect 92 (6.1%) attribute_identity 41 (2.7%); rating_subtype clear_false 715 clear_true 620 mostly_true 130 mostly_false 35",
+    "PURPOSE: the pinned fitting population for read-v6.1 six-flag and the Kimi run (Daniel 2026-09-14 PM); tracks full-population difficulty (six-weight v6.1 oof AUC 0.8512, recall@2%FPR 0.415) rather than the inflated clean slice (0.8853), clog/140926.md"
+   ],
+   "inputs": {
+    "eval/data/populations/fc_gold.parquet": "e445c00528a32867df6fb1afdb3587cb73465a8a0f6dca16713b62954c796a22"
+   }
+  },
+  "cn_false.parquet": {
+   "rows": 1739,
+   "rules": [
+    "urn_runs/c2_false/scores.jsonl + scores_ext.jsonl (2,086 scored claims)",
+    "minus fit_exclusions.json, claim[:80] prefix match (34)",
+    "minus c2_false/media_provenance_exclusions.json, excluded=true (250)",
+    "zero-doc claims KEPT (83); the urn loader pads every claim to 10 slots with silent documents \u2014 the zero-doc rule is retired (Daniel 2026-09-08)",
+    "minus claims whose Community Note never locked, tier != gold (63) \u2014 NEW 2026-09-08, not applied by fit_two_urn.load_urn"
+   ],
+   "inputs": {
+    "eval/data/urn_runs/c2_false/scores.jsonl": "209a1377ed9e24f3c429ea6aaa3b3ab73a36cc784983da8d8eb7332f1591b62d",
+    "eval/data/urn_runs/c2_false/scores_ext.jsonl": "15b67ffb6ef8cd6b7b69bb989485f738cd04435bfe524f7e4b4a4783d368ac43",
+    "eval/data/urn_runs/c2_false/fit_exclusions.json": "ed024ad24ffd490f0c381e083ef5a2571824f6d69043092bdbf629cd95396f58",
+    "eval/data/urn_runs/c2_false/media_provenance_exclusions.json": "9dbbef27af36074bb1f15880bb31d30928fd30b4f45f841b76765176dfd5aaed",
+    "eval/data/community_notes/cn_gold_clusters.parquet": "ef6ae93abe6ebe62cdcd22a4e6d292c5237889a746671f531c071be930828052",
+    "eval/data/tweet_corpus/cn_false_urn_posts.parquet": "8453fdd85b7f4f90108525bc1caa211f81e6bedde46853a8c129eb7712d6727a",
+    "eval/data/tweet_corpus/cn_false_urn_ext_posts.parquet": "59396216a89448ad9abaec9adcca3191c35beccea6d89b1c60dbe65d5bfc5165"
+   }
+  },
+  "x_feed.parquet": {
+   "rows": 1970,
+   "rules": [
+    "urn_runs/true_timeline/scores.jsonl, the parity set (2077 scored claims)",
+    "zero-doc claims KEPT (78); the urn loader pads every claim to 10 slots with silent documents \u2014 the zero-doc rule is retired (Daniel 2026-09-08)",
+    "minus tl_screen_nocontext.parquet verdict != ok (61) \u2014 NEW 2026-09-08, was a sensitivity cut only",
+    "minus media-locus claims, cn_false_stratum.MEDIA_RE (7) \u2014 NEW 2026-09-08, CN-side parity screen",
+    "minus near-duplicate claims, token Jaccard >= 0.85 first-kept (39) \u2014 NEW 2026-09-08, CN-side parity screen"
+   ],
+   "inputs": {
+    "eval/data/urn_runs/true_timeline/scores.jsonl": "4f85f13c2cb811e112fc47da774ef15af137dd867a44ae92e20238f1cc40d2bd",
+    "eval/data/urn_runs/true_timeline/tl_screen_nocontext.parquet": "63ecbfe02ee268f520fbb097e49fe5fddf40f92c001f31229135aeb9f8893f4a"
+   }
+  },
+  "fc_gold_clean1500.parquet": {
+   "rows": 1500,
+   "rules": [
+    "seeded (numpy default_rng seed 20260914), cluster-aware, BALANCED true/false draw of 1,500 claims (750 true / 750 false) from the clean 2,057 subset of frozen fc_gold.parquet",
+    "clean subset = fc_gold.parquet (3,280) minus: resolution_status in {needs-article, self-attributed} + claim_screen_unresolved_referent + claim_screen_misattributed_media + claim_screen_media_locus (44 claim-shape); judged_axis_llm == quote_attribution (761); keep rating_subtype in {clear_true, clear_false} (drops 418) -> 2,057 (831 T / 1,226 F)",
+    "every clean-set cluster is a singleton, so the draw is cluster-disjoint by construction and respects graded_urn 5-fold cluster_id folds",
+    "BALANCED 750 true (veracity 5) / 750 false (veracity 1); re-pinned balanced 2026-09-14 for the read-v6 six-flag acceptance test (Daniel's ruling; clog/140926.md)",
+    "HISTORY: the first pin (2026-09-14, earlier the same day) was a proportional draw of 606 true / 894 false from the same clean 2,057 under the same seed 20260914; superseded by this balanced draw before any read-v6 spend",
+    "PURPOSE: the pinned reproducible fitting slice (learning-curve knee ~1,500) and the fitting population for the read-v6 six-flag work and the coming Kimi run (clog/140926.md)"
+   ],
+   "inputs": {
+    "eval/data/populations/fc_gold.parquet": "e445c00528a32867df6fb1afdb3587cb73465a8a0f6dca16713b62954c796a22"
+   },
+   "superseded": "best-case slice, superseded as fitting population 2026-09-14 PM by fc_gold_rep1500.parquet (representative balanced draw from the frozen 3,280 minus 44 claim-shape failures, not the best-case clean 2,057). Retained as the best-case reference slice."
+  },
+  "fc_gold_bal3000.parquet": {
+   "rows": 3000,
+   "rules": [
+    "SUPERSET of fc_gold_rep1500 (all 1,500 rep claims kept verbatim: 750 true / 750 false)",
+    "+ 750 true / 750 false drawn from the other 1,736 frozen claims (frozen 3,236 minus rep1500), stratified by judged_axis_llm x veracity, numpy default_rng seed 20260916, without replacement",
+    "source pool = frozen fc_gold 3,236 = fc_gold.parquet 3,280 minus 44 claim-shape failures (resolution needs-article/unresolvable-list/self-attributed + claim_screen_unresolved_referent + claim_screen_misattributed_media/media_locus), same disjoint order as graded_urn's clean subset",
+    "true = veracity {4,5} (y=1); false = veracity {1,2,3} (y=0, v3=mid/unprovable). Balanced 1,500 T / 1,500 F",
+    "dropped from the other 1,736: 34 true + 202 false (ids in fc_gold_bal3000.manifest.json)",
+    "PURPOSE: fitting/eval population for the read-v5 SEVEN-flag ceiling refit (2026-09-16 revert to the graded 7-flag urn: flags 5/4/3/X/I/2/1, reader read-v5 @ DeepSeek-V4-Flash); doubles rep1500 while staying balanced. Companion manifest: fc_gold_bal3000.manifest.json"
+   ],
+   "built_by": "eval/scripts/build_eval/build_fc_gold_bal3000.py",
+   "seed": 20260916,
+   "inputs": {
+    "eval/data/populations/fc_gold.parquet": "e445c00528a32867df6fb1afdb3587cb73465a8a0f6dca16713b62954c796a22",
+    "eval/data/populations/fc_gold_rep1500.parquet": "supersets this file"
+   }
+  }
+ }
+}

@@ -1,0 +1,128 @@
+{
+  "data": {
+    "threaded_conversation_with_injections_v2": {
+      "instructions": [
+        {
+          "type": "TimelinePinEntry",
+          "entry": {
+            "entryId": "tweet-4000",
+            "content": {
+              "entryType": "TimelineTimelineItem",
+              "itemContent": {
+                "itemType": "TimelineTweet",
+                "tweet_results": {
+                  "result": {
+                    "__typename": "Tweet",
+                    "rest_id": "4000",
+                    "core": {
+                      "user_results": {
+                        "result": {
+                          "__typename": "User",
+                          "rest_id": "801",
+                          "core": { "screen_name": "ivan", "name": "Ivan" }
+                        }
+                      }
+                    },
+                    "legacy": {
+                      "id_str": "4000",
+                      "full_text": "Root tweet of the thread (delivered via a pin entry).",
+                      "created_at": "Sat Mar 15 09:00:00 +0000 2025",
+                      "lang": "en",
+                      "conversation_id_str": "4000"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "TimelineAddEntries",
+          "entries": [
+            {
+              "entryId": "tweet-4001",
+              "content": {
+                "entryType": "TimelineTimelineItem",
+                "itemContent": {
+                  "itemType": "TimelineTweet",
+                  "tweet_results": {
+                    "result": {
+                      "__typename": "Tweet",
+                      "rest_id": "4001",
+                      "core": {
+                        "user_results": {
+                          "result": {
+                            "__typename": "User",
+                            "rest_id": "802",
+                            "legacy": { "screen_name": "judy", "name": "Judy" }
+                          }
+                        }
+                      },
+                      "legacy": {
+                        "id_str": "4001",
+                        "full_text": "A direct reply in the conversation.",
+                        "created_at": "Sat Mar 15 09:05:00 +0000 2025",
+                        "lang": "en",
+                        "conversation_id_str": "4000"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "entryId": "conversationthread-4002",
+              "content": {
+                "entryType": "TimelineTimelineModule",
+                "__typename": "TimelineTimelineModule",
+                "items": [
+                  {
+                    "entryId": "conversationthread-4002-tweet-4002",
+                    "item": {
+                      "itemContent": {
+                        "itemType": "TimelineTweet",
+                        "tweet_results": {
+                          "result": {
+                            "__typename": "Tweet",
+                            "rest_id": "4002",
+                            "core": {
+                              "user_results": {
+                                "result": {
+                                  "__typename": "User",
+                                  "rest_id": "803",
+                                  "legacy": { "screen_name": "mallory", "name": "Mallory" }
+                                }
+                              }
+                            },
+                            "legacy": {
+                              "id_str": "4002",
+                              "full_text": "A nested reply delivered inside a module items[] array.",
+                              "created_at": "Sat Mar 15 09:10:00 +0000 2025",
+                              "lang": "en",
+                              "conversation_id_str": "4000"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "entryId": "conversationthread-4002-cursor-showmore",
+                    "item": {
+                      "itemContent": {
+                        "itemType": "TimelineTimelineCursor",
+                        "__typename": "TimelineTimelineCursor",
+                        "value": "more-replies-cursor",
+                        "cursorType": "ShowMoreThreads"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

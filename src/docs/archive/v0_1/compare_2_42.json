@@ -1,0 +1,18 @@
+{
+  "n": 2,
+  "seed": 42,
+  "configs": [
+    "llama-3.3-70b",
+    "llama-4-scout-17b"
+  ],
+  "tallies": {
+    "llama-3.3-70b": {
+      "correct": 0,
+      "total": 2
+    },
+    "llama-4-scout-17b": {
+      "correct": 1,
+      "total": 2
+    }
+  }
+}

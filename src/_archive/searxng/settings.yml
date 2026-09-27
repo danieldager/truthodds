@@ -1,0 +1,17 @@
+use_default_settings: true
+
+server:
+  secret_key: "change-me-local-only"
+  limiter: false
+  image_proxy: false
+
+search:
+  formats:
+    - html
+    - json
+  safe_search: 0
+  autocomplete: ""
+  default_lang: "en"
+
+ui:
+  static_use_hash: true

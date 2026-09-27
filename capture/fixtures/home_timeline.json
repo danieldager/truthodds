@@ -1,0 +1,188 @@
+{
+  "data": {
+    "home": {
+      "home_timeline_urt": {
+        "instructions": [
+          {
+            "type": "TimelineAddEntries",
+            "entries": [
+              {
+                "entryId": "tweet-1001",
+                "sortIndex": "9000",
+                "content": {
+                  "entryType": "TimelineTimelineItem",
+                  "__typename": "TimelineTimelineItem",
+                  "itemContent": {
+                    "itemType": "TimelineTweet",
+                    "__typename": "TimelineTweet",
+                    "tweet_results": {
+                      "result": {
+                        "__typename": "Tweet",
+                        "rest_id": "1001",
+                        "core": {
+                          "user_results": {
+                            "result": {
+                              "__typename": "User",
+                              "rest_id": "501",
+                              "legacy": {
+                                "screen_name": "alice",
+                                "name": "Alice"
+                              }
+                            }
+                          }
+                        },
+                        "legacy": {
+                          "id_str": "1001",
+                          "full_text": "Hello world from the timeline",
+                          "created_at": "Wed Mar 12 09:00:00 +0000 2025",
+                          "lang": "en",
+                          "conversation_id_str": "1001",
+                          "entities": {
+                            "media": [
+                              { "id_str": "m1", "type": "photo", "media_url_https": "https://pbs.twimg.com/media/photo1.jpg" }
+                            ]
+                          },
+                          "extended_entities": {
+                            "media": [
+                              { "id_str": "m1", "type": "photo", "media_url_https": "https://pbs.twimg.com/media/photo1.jpg" },
+                              { "id_str": "m2", "type": "photo", "media_url_https": "https://pbs.twimg.com/media/photo2.jpg" },
+                              { "id_str": "m3", "type": "video", "media_url_https": "https://pbs.twimg.com/media/videothumb.jpg", "video_info": { "variants": [ { "content_type": "video/mp4", "url": "https://video.twimg.com/ext_tw_video/vid.mp4" } ] } },
+                              { "id_str": "m4", "type": "animated_gif", "media_url_https": "https://pbs.twimg.com/tweet_video_thumb/gifthumb.jpg" }
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                "entryId": "tweet-1002",
+                "sortIndex": "8999",
+                "content": {
+                  "entryType": "TimelineTimelineItem",
+                  "__typename": "TimelineTimelineItem",
+                  "itemContent": {
+                    "itemType": "TimelineTweet",
+                    "tweet_results": {
+                      "result": {
+                        "__typename": "Tweet",
+                        "rest_id": "1002",
+                        "core": {
+                          "user_results": {
+                            "result": {
+                              "__typename": "User",
+                              "rest_id": "502",
+                              "core": {
+                                "screen_name": "bob",
+                                "name": "Bob"
+                              }
+                            }
+                          }
+                        },
+                        "note_tweet": {
+                          "is_expandable": true,
+                          "note_tweet_results": {
+                            "result": {
+                              "id": "ntr_1002",
+                              "text": "This is the FULL long-form note tweet text that exceeds 280 characters and therefore would be truncated in legacy.full_text. The extractor must prefer this field so research data is not silently cut off mid-sentence at the legacy boundary."
+                            }
+                          }
+                        },
+                        "legacy": {
+                          "id_str": "1002",
+                          "full_text": "This is the FULL long-form note tweet text that exceeds 280 characters and therefore would be truncated in legacy.full_text. The extractor must prefer this field so research data is not silently cut off mid-sente…",
+                          "created_at": "Wed Mar 12 09:01:00 +0000 2025",
+                          "lang": "en",
+                          "conversation_id_str": "1002"
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                "entryId": "tweet-1003",
+                "sortIndex": "8998",
+                "content": {
+                  "entryType": "TimelineTimelineItem",
+                  "__typename": "TimelineTimelineItem",
+                  "itemContent": {
+                    "itemType": "TimelineTweet",
+                    "tweet_results": {
+                      "result": {
+                        "__typename": "TweetWithVisibilityResults",
+                        "tweet": {
+                          "__typename": "Tweet",
+                          "rest_id": "1003",
+                          "core": {
+                            "user_results": {
+                              "result": {
+                                "__typename": "User",
+                                "rest_id": "503",
+                                "legacy": {
+                                  "screen_name": "carol",
+                                  "name": "Carol"
+                                }
+                              }
+                            }
+                          },
+                          "legacy": {
+                            "id_str": "1003",
+                            "full_text": "你好 🌏 café — emoji and non-Latin script test",
+                            "created_at": "Wed Mar 12 09:02:00 +0000 2025",
+                            "lang": "zh",
+                            "conversation_id_str": "1003"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                "entryId": "who-to-follow-200",
+                "sortIndex": "8997",
+                "content": {
+                  "entryType": "TimelineTimelineModule",
+                  "__typename": "TimelineTimelineModule",
+                  "items": [
+                    {
+                      "entryId": "who-to-follow-200-user-777",
+                      "item": {
+                        "itemContent": {
+                          "itemType": "TimelineUser",
+                          "user_results": {
+                            "result": {
+                              "__typename": "User",
+                              "rest_id": "777",
+                              "legacy": {
+                                "screen_name": "suggested_user",
+                                "name": "Suggested User",
+                                "description": "I should NOT be captured as a tweet."
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "entryId": "cursor-bottom-abc",
+                "sortIndex": "8000",
+                "content": {
+                  "entryType": "TimelineTimelineCursor",
+                  "__typename": "TimelineTimelineCursor",
+                  "value": "DAABCgABF...cursor...==",
+                  "cursorType": "Bottom"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

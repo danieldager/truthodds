@@ -1,0 +1,403 @@
+\documentclass[11pt]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+% simple, share-friendly formatting
+\setlength{\parskip}{0.5em}
+\setlength{\parindent}{0pt}
+\renewcommand{\arraystretch}{1.2}
+
+\title{Verdict Likert Dimensions\\[0.3em]
+\large Current set, proposed extensions, and what the last run showed}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+
+Companion to \texttt{verdict\_confidence\_design.md} (the binary-verdict + confidence
+redesign) and \texttt{confidence\_metrics.md} (the calibration metric suite). This document
+is the single reference for \textbf{the score dimensions themselves}: what we score today
+(verbatim from the prompt), how to grow to \textbf{3 truth + 3 confidence} dimensions, and
+what the last run's distributions imply.
+
+\paragraph{TL;DR}
+\begin{itemize}[leftmargin=1.4em]
+  \item Today the verifier scores \textbf{1 truth dimension} (\texttt{veracity}) +
+    \textbf{3 confidence dimensions} (\texttt{evidence\_sufficiency},
+    \texttt{evidence\_agreement}, \texttt{source\_reliability}), each 1--5.
+  \item To reach \textbf{3 truth + 3 confidence}, add \textbf{2 truth dimensions}:
+    \textbf{Contextual Integrity (misleadingness)} and \textbf{Attribution Fidelity} ---
+    both orthogonal to \texttt{veracity}, both measurable text-only, both mapping to
+    problems we already care about (the \S3b post-flag step and the attribution-safety rule).
+  \item The 3 confidence dims are not equal: \texttt{evidence\_sufficiency} is the best
+    evidence-side signal; \texttt{source\_reliability} carries \textbf{almost no signal}
+    last run (AUROC 0.56; the literature agrees source-credibility is a weak heuristic)
+    $\rightarrow$ \textbf{redefine toward evidence independence/provenance, or drop it.}
+    And the model's own verdict-decisiveness is \textbf{anti-predictive} --- the usable
+    confidence signal is \textbf{cross-model agreement} (see \S5).
+\end{itemize}
+
+\hrulefill
+
+\section{The current dimensions (verbatim from \texttt{verify\_prompts.py::LIKERT\_SYSTEM})}
+
+One LLM call scores the synthesized analysis. Prompt header: \emph{``Output one veracity
+score (the verdict --- which way the evidence points) and three confidence scores (how much
+to trust that read). Score each 1-5 independently against its own definition. Use the full
+scale, including 2 and 4 deliberately.''} Parsed by \texttt{parse\_likert}, clamped 1--5,
+stored in \texttt{models.py::VerdictScores}.
+
+\subsection*{\texttt{veracity} --- truth (the verdict direction)}
+\emph{Which way, and how strongly, does the evidence point on the claim's MAIN assertion?}
+
+\begin{longtable}{@{}c>{\raggedright\arraybackslash}p{0.9\linewidth}@{}}
+\toprule
+5 & Clearly true --- evidence confirms the main assertion and its load-bearing specifics
+(numbers, dates, named entities). \\
+4 & Mostly true --- the main assertion holds, but a load-bearing specific may be approximate
+or slightly off. \\
+3 & Mixed or indeterminate --- neither clearly confirms nor clearly contradicts the main
+assertion. \\
+2 & Mostly false --- the main assertion is contradicted, though a detail may be unclear. \\
+1 & Clearly false --- the evidence contradicts the main assertion. \\
+\bottomrule
+\end{longtable}
+
+\subsection*{\texttt{evidence\_sufficiency} --- confidence}
+\emph{How directly and fully does the evidence address the claim?}
+
+\begin{longtable}{@{}c>{\raggedright\arraybackslash}p{0.9\linewidth}@{}}
+\toprule
+5 & Speaks directly to the main assertion AND its load-bearing specifics. \\
+4 & Directly addresses the main assertion, but leaves a specific (a number, date, qualifier)
+untouched. \\
+3 & Partial --- touches the topic but addresses the specific assertion only loosely, or
+through a single piece of evidence. \\
+2 & Only topically adjacent --- does not speak to the specific assertion. \\
+1 & Nothing in the analysis bears on the claim's substance. \\
+\bottomrule
+\end{longtable}
+
+\subsection*{\texttt{evidence\_agreement} --- confidence}
+\emph{Do the pieces of evidence point the same way?}
+
+\begin{longtable}{@{}c>{\raggedright\arraybackslash}p{0.9\linewidth}@{}}
+\toprule
+5 & All pieces point the same way; no contradictions. \\
+4 & Broad convergence; only minor differences of scope or wording. \\
+3 & Some tension between pieces --- or only one piece exists, so agreement cannot be judged. \\
+2 & Notable conflict --- at least one piece points each way. \\
+1 & The evidence flatly contradicts itself on a load-bearing point. \\
+\bottomrule
+\end{longtable}
+
+\subsection*{\texttt{source\_reliability} --- confidence}
+\emph{How trustworthy are the cited sources, regardless of what they say?}
+
+\begin{longtable}{@{}c>{\raggedright\arraybackslash}p{0.9\linewidth}@{}}
+\toprule
+5 & Primary or authoritative --- official records, peer-reviewed work, named domain experts,
+court/legislative documents. \\
+4 & Established mainstream outlets or institutional reporting. \\
+3 & Mixed --- some reputable, but leaning on secondary or lower-tier reporting. \\
+2 & Mostly blogs, opinion, or low-traffic sites. \\
+1 & Only fringe, anonymous, or unidentifiable sources --- or none usable. \\
+\bottomrule
+\end{longtable}
+
+\emph{(History: the earlier set was \texttt{veracity / coverage / consistency /
+source\_quality}; coverage$\rightarrow$evidence\_sufficiency,
+consistency$\rightarrow$evidence\_agreement, source\_quality$\rightarrow$source\_reliability.
+The binary verdict (\texttt{pass} iff supported, else \texttt{flag}) is derived from
+\texttt{veracity} by a threshold --- see \texttt{verdict\_confidence\_design.md}.)}
+
+Two related prompts score the same analysis: a 4-class evaluator (ClaimCheck verbatim:
+Supported / Refuted / Conflicting Evidence-Cherrypicking / Not Enough Evidence) and the
+\S3b post-level FLAG step (judges the raw post for misleadingness given the atomic verdict).
+
+\hrulefill
+
+\section{Why decompose ``truth'' into more than one axis}
+
+\texttt{veracity} is a single true$\leftrightarrow$false spine. Every mature fact-checking
+scheme refuses to live on that spine alone --- they either fold context into the mid-scale
+or add \textbf{non-degree tags}:
+
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.18\linewidth}
+  >{\raggedright\arraybackslash}p{0.13\linewidth}
+  >{\raggedright\arraybackslash}p{0.27\linewidth}
+  >{\raggedright\arraybackslash}p{0.22\linewidth}
+  >{\raggedright\arraybackslash}p{0.12\linewidth}@{}}
+\toprule
+\textbf{Scheme} & \textbf{Truth-degree} & \textbf{Context/framing} & \textbf{Attribution} &
+\textbf{Temporal} \\
+\midrule
+PolitiFact (6-pt) & \checkmark & \textbf{\checkmark\ baked in} (Half True = ``out of
+context'') & --- & implicit \\
+WaPo Pinocchios & partial & \textbf{\checkmark} (2 = ``misleading impression\ldots playing
+with words'') & --- & repetition axis \\
+\textbf{Snopes} & \checkmark & tag: \emph{Miscaptioned} & \textbf{tags: \emph{Misattributed}
+/ \emph{Correct Attribution}} & tag: \emph{Outdated} \\
+schema.org ClaimReview & numeric + textual & free-text & --- & --- \\
+FEVER & 3-way (+NEI) & --- & --- & --- \\
+\textbf{AVeriTeC} & 4-way & \textbf{\checkmark} Cherrypicking is a verdict class & --- & --- \\
+Wardle 7 types & --- & Misleading / False-context / False-connection & Imposter /
+misattribution & False context \\
+\bottomrule
+\end{longtable}
+
+Journalistic scales (PolitiFact/WaPo/Snopes) separate literal truth from context,
+attribution, and time; Snopes makes attribution and time \textbf{first-class tags orthogonal
+to its truth scale} --- the cleanest existence proof that these are distinct axes, not
+sub-cases of degree-of-truth. A data-driven mapping study finds these scales only align once
+collapsed to binary real/fake, and that ``Misleading/Unproven/Miscaptioned'' categories
+don't map onto a linear truth line. That is the empirical case for \textbf{adding axes rather
+than stretching \texttt{veracity}.}
+
+\hrulefill
+
+\section{Proposed 2 new truth dimensions}
+
+\subsection*{Truth dim \#2 --- Contextual Integrity (misleadingness / framing fidelity)}
+\emph{Beyond the literal assertion, does the impression the post creates survive the full
+evidence --- or do omitted context, cherry-picking, or implied causation make a
+literally-true claim mislead?}
+
+\begin{longtable}{@{}c>{\raggedright\arraybackslash}p{0.9\linewidth}@{}}
+\toprule
+5 & Literal content \textbf{and} its evident implication are supported; no material context
+omitted that would change a reader's takeaway. \\
+3 & Literally accurate but missing context/qualification a reasonable reader needs; a
+\emph{partially} unsupported impression ($\approx$ PolitiFact \textbf{Half True}). \\
+1 & True-ish details arranged to imply a conclusion the evidence contradicts ---
+cherry-picking, implied causation, \textbf{stale event shown as current} ($\approx$ paltering
+/ \textbf{Cherrypicking}). \\
+\bottomrule
+\end{longtable}
+
+\begin{itemize}[leftmargin=1.4em]
+  \item \textbf{Why:} this is the single largest gap between \texttt{veracity} and ground
+    truth, and it is exactly what the \S3b post-flag step needs to judge. Fact-checkers treat
+    it as core (PolitiFact's busiest mid-ratings are \emph{defined} by context omission;
+    AVeriTeC promotes Cherrypicking to a verdict class). The psychology is named:
+    \textbf{paltering} = ``deceiving through truthful statements.''
+  \item \textbf{Distinct from} \texttt{veracity} (scores the literal assertion; CI scores
+    whether the \emph{gist} holds even when the literal claim is true) and from
+    \texttt{evidence\_*} (those are about the evidence we gathered; CI is about
+    claim-framing-vs-evidence).
+  \item \textbf{Measurable text-only:} yes --- we already retrieve the surrounding evidence.
+    The added step: (i) state the literal proposition, (ii) name the \emph{implied}
+    proposition, (iii) test whether full evidence supports the implication / whether a
+    material fact was omitted. \textbf{Anchor it to hold literal truth fixed} (``literally
+    accurate \textbf{but}\ldots'') so it can't silently re-score \texttt{veracity}.
+  \item \textbf{Folds in temporal:} the ``stale-as-current'' case is encoded as the level-1
+    anchor for now (see \S5 on Temporal Validity as a later standalone axis).
+\end{itemize}
+
+\subsection*{Truth dim \#3 --- Attribution Fidelity}
+\emph{For ``X said/did Y'' claims, does the evidence confirm X is correctly the source/agent
+of Y --- scored independently of whether Y itself is true.}
+
+\begin{longtable}{@{}c>{\raggedright\arraybackslash}p{0.9\linewidth}@{}}
+\toprule
+5 & Evidence confirms the named source/actor said/did exactly what's claimed, in context. \\
+3 & Roughly the right source but the quote is altered, partial, or stripped of qualifying
+context; or right words, wrong stance. \\
+1 & Misattributed/fabricated quote, imposter source, or words so out of context the meaning
+inverts ($\approx$ Snopes \textbf{Misattributed}; Wardle \textbf{imposter}). \\
+N/A & Claim makes no attribution $\rightarrow$ \textbf{masked, not scored low} (see risks). \\
+\bottomrule
+\end{longtable}
+
+\begin{itemize}[leftmargin=1.4em]
+  \item \textbf{Why:} this directly implements our hard nudge-safety constraint --- \emph{do
+    not flag accurate reporting of a false claim as if the poster lied.} ``X said Y'' is two
+    checks (did X say it; is Y true). Snopes carries distinct \emph{Misattributed} /
+    \emph{Correct Attribution} tags orthogonal to its truth scale; claim-normalization
+    research explicitly keeps original quotes and decontextualizes the reference separately
+    from verifying the content.
+  \item \textbf{Distinct from} \texttt{veracity}: a post can be attribution 5 / veracity 1
+    (faithfully quotes a false statement $\rightarrow$ should \textbf{pass} as accurate
+    reporting). Not a statement about evidence quality.
+  \item \textbf{Measurable text-only:} yes for quoted/attributed claims --- retrieval can
+    locate the quote and check wording + context. \textbf{Needs an explicit ``applicable?''
+    gate}; most claims are non-attributed and must be \emph{masked} (N/A), not penalized.
+\end{itemize}
+
+\hrulefill
+
+\section{Re-assessing the 3 confidence dimensions}
+
+\begin{itemize}[leftmargin=1.4em]
+  \item \textbf{\texttt{evidence\_sufficiency} --- keep.} The most-attested confidence facet
+    in claim verification (FEVER's \emph{NEI}, AVeriTeC's \emph{Not Enough Evidence} are
+    dedicated classes), and it helped in our data. Our cleanest confidence signal.
+  \item \textbf{\texttt{evidence\_agreement} --- keep, watch overlap.} Conflicting evidence
+    is a first-class state. Risk: AVeriTeC couples agreement with \emph{cherry-picking},
+    which is Contextual Integrity above --- keep them disjoint (\textbf{agreement =
+    evidence-vs-evidence; CI = claim-framing-vs-evidence}).
+  \item \textbf{\texttt{source\_reliability} --- redefine or replace.} It carried
+    \textbf{almost no signal} last run (AUROC 0.56), consistent with the literature:
+    source-credibility is a weak heuristic and predicting correctness from source features is
+    empirically poor (esp. on the unreliable end). It is plausibly \textbf{confounded} ---
+    hard/contested claims attract lower-grade sources, so low reliability co-occurs with
+    hard-but-correct reads. \textbf{Options:} (a) redefine toward \textbf{evidence
+    provenance/independence} (count of \emph{independent} corroborating sources,
+    primary-vs-secondary) rather than reputational trust; or (b) drop it. The slot is better
+    spent on \textbf{cross-model agreement} --- the single best confidence signal we measured
+    (\S5), i.e.\ a self-consistency / panel facet, the best-attested confidence family.
+\end{itemize}
+
+\hrulefill
+
+\section{Distribution \& calibration analysis (last run)}
+
+\textbf{The collaborators' question --- did lower confidence track lower accuracy? Short
+answer: no, not reliably, and the model's own decisiveness is the \emph{worst} confidence
+signal.} Verified by re-running
+\texttt{eval/scripts/verdict\_confidence/dimension\_distributions.py} (full tables in
+\texttt{results/dimension\_analysis.md}). Data: \textbf{\texttt{agreement.parquet}} (n=60,
+all 4 dims across a 4-model panel; \texttt{correct = deployment\_binary==gold}, acc 0.80) for
+the multi-dim read; \textbf{\texttt{flag\_eval.parquet}} (n=1024, \texttt{veracity} +
+\texttt{bare\_correct}, acc 0.85) for power. \emph{n=60 $\rightarrow$ panel numbers are
+directional; the n=1024 results carry the powered claims.}
+
+\paragraph{(a) The scale is barely used --- opposite failures on the two halves.}
+The prompt says ``use 2 and 4 deliberately''; it largely doesn't. \texttt{veracity} collapses
+to the \textbf{poles} (level-3 = 2.7\%, \textbf{81.8\% of mass at \{1,5\}}); the 3 confidence
+dims pin to the \textbf{ceiling} (means 4.09--4.37, $\sim$85\% at $\geq$4). Little dynamic
+range --- this is the \textbf{bigger calibration limiter} than the choice of dims.
+
+\paragraph{(b) \texttt{veracity} is a direction, not a confidence --- and ``confident'' is
+the high-risk bucket.} Errors don't sit at the uncertain middle; they cluster at
+\textbf{confident-TRUE}:
+
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.28\linewidth}
+  >{\raggedright\arraybackslash}p{0.33\linewidth}
+  >{\raggedright\arraybackslash}p{0.33\linewidth}@{}}
+\toprule
+ & \textbf{confident-FALSE (\texttt{veracity=1})} & \textbf{confident-TRUE
+(\texttt{veracity=5})} \\
+\midrule
+flag\_eval (n=1024) & err \textbf{2.2\%} (n=544) & err \textbf{30.6\%} (n=294) --- \emph{all
+90 errors are misinformation that PASSED} \\
+panel (n=60) & err 7.1\% & err 54.5\% --- \emph{all errors gold=flag} \\
+\bottomrule
+\end{longtable}
+
+Accuracy by \texttt{veracity} level (flag\_eval): v1 \textbf{0.978}, v2 0.719, v3 0.821, v4
+0.652, v5 \textbf{0.694}; raw \texttt{veracity} correlates \textbf{$-0.36$} with correctness
+--- a high ``true'' call is \emph{less} often right. The deployment headline: \textbf{never
+trust a confident PASS at face value.}
+
+\paragraph{(c) Which signals actually predict correctness} (panel n=60, AUROC / AURC;
+base-err 0.200):
+
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.42\linewidth}cc
+  >{\raggedright\arraybackslash}p{0.32\linewidth}@{}}
+\toprule
+\textbf{Signal} & \textbf{AUROC} & \textbf{AURC} & \\
+\midrule
+cross-model agreement ($-$veracity std) & \textbf{0.658} & \textbf{0.113} & best --- monotone
+(acc 0.65$\rightarrow$0.85$\rightarrow$0.90 by tertile) \\
+\texttt{evidence\_sufficiency} mean & \textbf{0.650} & 0.117 & best evidence-side dim \\
+panel veracity magnitude & 0.622 & 0.139 & \\
+weakest-link \texttt{min} of conf dims & 0.616 & 0.128 & \\
+\texttt{evidence\_agreement} mean & 0.598 & 0.152 & \\
+\texttt{source\_reliability} mean & 0.560 & 0.153 & \textbf{near-useless} \\
+ensemble verdict decisiveness $|$veracity$-3|$ & \textbf{0.486} & 0.218 &
+\textbf{anti-predictive} (acc \emph{falls} 0.85$\rightarrow$0.80$\rightarrow$0.75) \\
+\bottomrule
+\end{longtable}
+
+The only useful confidence signals are \textbf{cross-model agreement} (ask several models;
+trust what they agree on) and \textbf{\texttt{evidence\_sufficiency}}. The verdict's own
+decisiveness is worse than random ordering. \textbf{This does NOT replicate the earlier
+``veracity-magnitude AUROC $\approx$0.76'' note} --- that was a single-model/dev-slice read;
+on the reproducible run data magnitude is a poor signal. Flag for re-confirmation on a larger
+panel.
+
+\paragraph{(d) The dims are NOT redundant.} Confidence-dim Spearman $\rho$ = 0.33--0.59 (all
+well below 0.9) $\rightarrow$ the decomposition is real; keep all three. Each confidence dim
+is \emph{negatively} correlated with \texttt{veracity} ($-0.10$ to $-0.40$) --- the model
+rates evidence ``sufficient/agreeing'' more when it leans false.
+
+\paragraph{Implications:} (i) fix the scale collapse first (few-shot anchors / force 2--4) ---
+it caps everything downstream; (ii) gate deployment confidence on \textbf{agreement +
+evidence\_sufficiency}, not the verdict's decisiveness; (iii) treat any confident PASS as the
+high-risk bucket --- exactly what the new \textbf{Contextual Integrity} + \textbf{Attribution
+Fidelity} truth dims are meant to catch (a confident-true literal claim that is misleading or
+misattributed).
+
+\hrulefill
+
+\section{Proposed final dimension set (3 truth + 3 confidence)}
+
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.13\linewidth}
+  >{\raggedright\arraybackslash}p{0.32\linewidth}
+  >{\raggedright\arraybackslash}p{0.48\linewidth}@{}}
+\toprule
+\textbf{Class} & \textbf{Dimension} & \textbf{Status} \\
+\midrule
+Truth & \texttt{veracity} & keep (drives the binary verdict) \\
+Truth & \textbf{Contextual Integrity} & \textbf{new} --- misleadingness/framing; powers the
+\S3b flag \\
+Truth & \textbf{Attribution Fidelity} & \textbf{new} --- masked when no attribution; powers
+nudge-safety \\
+Confidence & \texttt{evidence\_sufficiency} & keep (strongest confidence facet) \\
+Confidence & \texttt{evidence\_agreement} & keep (keep disjoint from Contextual Integrity) \\
+Confidence & \texttt{source\_reliability} $\rightarrow$ \textbf{provenance/independence}
+\emph{or} \textbf{self-consistency} & redefine or replace (anti-predictive as-is) \\
+\bottomrule
+\end{longtable}
+
+\textbf{Gate every new axis on a validation check} before shipping: does it add
+\emph{marginal} AUROC over the existing set, and does its learned weight have the expected
+sign? \texttt{source\_reliability} is the cautionary tale --- a plausible axis that encoded
+claim-hardness, not trustworthiness.
+
+\hrulefill
+
+\section{Open decisions (for the meeting)}
+
+\begin{itemize}[leftmargin=1.4em]
+  \item The two new truth dims --- agree on \textbf{Contextual Integrity + Attribution
+    Fidelity}, or swap in \textbf{Temporal Validity} (real but harder to measure text-only;
+    recommended as a phase-2 promotion from CI's stale-as-current anchor).
+  \item Does \texttt{veracity} stay one 1--5 verdict score, or do the 3 truth dims
+    \textbf{compose} into the verdict?
+  \item \texttt{source\_reliability}: redefine (provenance/independence) vs replace
+    (self-consistency) vs drop.
+  \item Few-shot vs the current zero-shot Likert prompt (the ``use 2 and 4'' instruction is
+    currently zero-shot --- the scale-usage numbers in \S5 will say whether it's obeyed).
+\end{itemize}
+
+\hrulefill
+
+\section*{References}
+
+\begin{itemize}[leftmargin=1.4em]
+  \item PolitiFact methodology (context baked into mid-ratings) $\cdot$ WaPo Pinocchios
+    $\cdot$ Snopes ratings (Misattributed/Miscaptioned/Outdated tags).
+  \item Wardle, \emph{Fake news. It's complicated.} (First Draft 7 types).
+  \item Schlichtkrull et al., \textbf{AVeriTeC} (FEVER 2024) --- Cherrypicking \& NEI as
+    first-class verdicts.
+  \item Rogers et al., \textbf{paltering} (deception via truthful statements), PMC7259623.
+  \item \textbf{ChronoFact} / Evidence-Based Temporal Fact Verification (arXiv:2407.15291)
+    --- temporal axis.
+  \item Source-reliability prediction is weak (arXiv:2410.18803);
+    source-credibility-as-heuristic (Liu et al.\ 2025, \emph{Communication Research}).
+  \item Claim Normalization (EMNLP'23 Findings); Document-level Claim Extraction \&
+    Decontextualisation (arXiv:2406.03239).
+\end{itemize}
+
+\emph{Full annotated survey (landscape table, rankings, all citations): the research brief
+feeding this doc; calibration metric definitions in \texttt{confidence\_metrics.md}.}
+
+\end{document}

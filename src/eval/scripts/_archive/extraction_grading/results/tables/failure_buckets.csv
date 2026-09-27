@@ -1,0 +1,5 @@
+bucket,n_claims,pct_of_claims
+fidelity,4,0.022598870056497175
+decontextualized,22,0.12429378531073447
+verifiability,10,0.05649717514124294
+misinfo_candidate_false,24,0.13559322033898305

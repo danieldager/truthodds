@@ -1,0 +1,208 @@
+% ⚠️ HISTORICAL SNAPSHOT (pipeline v0.1) — superseded by docs/pipeline.md (v0.2, 2026-05-18).
+% Describes the old retrieve→verify pipeline. Kept for reference only.
+
+\section{Fact-Checking Pipeline}
+
+\subsection{Overview}
+
+The pipeline intercepts a social media post before it is shared and produces a per-claim veracity verdict together with a post-level confidence score. It is implemented in Python and consists of four stages: (1)~claim detection and decomposition, (2)~evidence retrieval, (3)~iterative verification, and (4)~aggregation. The pipeline currently operates as a research prototype using cloud inference endpoints: Groq (Qwen3-32B for extraction; Llama-3.3-70B for verification, pending migration to DeepSeek~V3).
+
+\bigskip
+\begin{verbatim}
+Post (text)
+  |
+  +-- Step 1: Qwen3-32B (Groq)
+  |     Call 1 — is_checkable? + atomic claims + search queries
+  |     Call 2 — verifying questions (5-8 per claim)
+  |     |
+  |     +-- is_checkable = False --> exit, no nudge
+  |
+  +-- Step 2: Evidence retrieval (parallel across 3 sources)
+  |     Google Fact Check Tools API  (credibility 0.90)
+  |     Wikipedia summary API        (credibility 0.75)
+  |     Serper web search + scrape   (credibility from CRED-1)
+  |         |
+  |         +-- BM25 chunk extraction (top 2 x 300-word chunks)
+  |         +-- Cross-encoder rerank (ms-marco-MiniLM-L6-v2, top 10)
+  |         +-- MMR diversification (lambda=0.75, up to 5 items)
+  |
+  +-- Step 3: FIRE iterative verification (Llama-3.3-70B, up to 5 rounds)
+  |     Each round: verify_claim --> Likert[4 labels] + reasoning
+  |     Early exit if margin >= 4 and verdict != NEI
+  |     Else: generate follow-up query, retrieve, merge, repeat
+  |
+  +-- Step 4: Aggregation
+        Priority: Refuted > Conflicting Evidence > NEI > Supported
+        Threshold: confidence >= 0.65 to trigger priority promotion
+        --> post_verdict, post_confidence
+\end{verbatim}
+
+% -----------------------------------------------------------------------
+\subsection{Step 1: Claim Detection, Decomposition, and Verifying Questions}
+
+The first step determines whether the post contains any independently verifiable factual claims, decomposes it into atomic sub-claims, and generates the analytical scaffolding for later verification. It consists of two sequential LLM calls, both to Qwen3-32B via Groq.
+
+\paragraph{Call 1 --- Detection and decomposition.}
+A single structured prompt handles both tasks. The model decides whether the post contains any fact-checkable assertions (binary \texttt{is\_checkable}), and if so decomposes it into atomic sub-claims---each a standalone, independently verifiable statement. The model is instructed that falsifiability is determined by \emph{form}, not plausibility: ``the earth is flat'' is checkable; ``I love this country'' is not. Opinions, predictions, and pure questions are excluded, but sarcastic, emotional, and accusatory phrasings are not.
+
+For each atomic claim the model also generates three search queries from distinct angles: (1)~a direct factual query using named entities, (2)~a contextual or background query, and (3)~a debunking-oriented query. If no checkable claims are found the pipeline exits immediately and no nudge is issued.
+
+\paragraph{Call 2 --- Verifying questions.}
+A second prompt receives the full list of extracted atomic claims and generates 5--8 targeted analytical questions per claim. These are not search queries---they are the interpretive framework the verifier will use to reason over retrieved evidence. Representative question types include:
+\begin{itemize}
+  \item Official statements: ``What did \textit{Organisation} officially state about \textit{X} on \textit{date}?''
+  \item Expert consensus: ``What is the established scientific consensus on \textit{X}?''
+  \item Contradicting sources: ``Has any credible source contradicted this claim?''
+  \item Quantitative specifics: ``What exact figure does \textit{Organisation} report for \textit{metric}?''
+  \item Temporal anchoring: ``Was this claim accurate as of \textit{time period}?''
+\end{itemize}
+
+\paragraph{Output.}
+A list of \texttt{AtomicClaim} objects, each carrying: the claim text, three search queries, and 5--8 verifying questions.
+
+% -----------------------------------------------------------------------
+\subsection{Step 2: Evidence Retrieval}
+
+For each atomic claim, evidence is gathered from three sources concurrently using a thread pool. The three streams are merged, reranked by relevance, and diversified before being passed to the verifier.
+
+\paragraph{Google Fact Check Tools API.}
+The claim text is submitted to the Google Fact Check Tools API, which aggregates structured verdicts from professional fact-checking organisations worldwide (AFP, PolitiFact, Snopes, Full Fact, and hundreds of regional outlets). Matching fact-checks are included as evidence items with a fixed credibility score of 0.90. This is the highest-weight signal when available.
+
+\paragraph{Wikipedia.}
+A keyword search against the Wikipedia API retrieves summaries for the two most relevant articles. These provide stable encyclopaedic context about named entities and events referenced in the claim. Wikipedia evidence items are assigned a credibility score of 0.75.
+
+\paragraph{Web search and scraping.}
+The three claim-specific search queries are dispatched in parallel to the Serper Google Search API, retrieving up to three URLs per query (up to nine candidates total). A date ceiling is passed to Serper to prevent retrieval of evidence published after the claim date. Candidate URLs are filtered before scraping:
+
+\begin{enumerate}
+  \item \textbf{CRED-1 domain filter.} A database of 2{,}673 known domains is consulted. Domains categorised as fake, unreliable, or conspiratorial, or scoring below a credibility threshold of 0.30, are dropped.
+  \item \textbf{Scrape blocklist.} Domains that are structurally unscrapable (login walls, hard paywalls: Facebook, Twitter/X, Instagram, Reuters, Bloomberg, WSJ, etc.) are removed.
+\end{enumerate}
+
+Surviving URLs are scraped concurrently using Trafilatura with per-domain rate limiting (randomized 2.0--3.5s delay). For each scraped page, BM25 extracts the two most relevant 300-word chunks relative to the claim text, reducing noise and keeping context windows manageable. Scraped items receive a credibility score from CRED-1 (defaulting to 0.50 for unknown domains).
+
+\paragraph{Post-retrieval ranking and diversification.}
+All evidence from the three streams is concatenated and passed through two sequential filtering steps:
+\begin{enumerate}
+  \item \textbf{Cross-encoder reranking.} A \texttt{cross-encoder/ms-marco-MiniLM-L6-v2} model scores each evidence item against the claim text; the top 10 items by relevance are retained.
+  \item \textbf{MMR diversification.} Maximal Marginal Relevance selects up to 5 final items from the reranked set, balancing relevance ($\lambda = 0.75$) against redundancy ($1-\lambda = 0.25$). This prevents the verifier from receiving multiple paraphrases of the same source. An early-stop condition discards items whose marginal contribution falls below a minimum threshold.
+\end{enumerate}
+
+\paragraph{Output.}
+A \texttt{ClaimEvidence} object per claim containing up to 5 evidence items, each carrying a URL, text content, and credibility score.
+
+% -----------------------------------------------------------------------
+\subsection{Step 3: Iterative Verification (FIRE Loop)}
+
+\paragraph{Single-round verification.}
+Each verification call presents the LLM (Llama-3.3-70B via Groq) with: the atomic claim, its 5--8 verifying questions, and the evidence items annotated with credibility scores. The model is instructed to:
+\begin{enumerate}
+  \item Answer each verifying question from the evidence, citing source URLs. Higher-credibility sources ($\geq 0.6$) carry more weight; sources below 0.3 are treated as weak unless corroborated.
+  \item Reason over the resulting question-answer pairs to assess the claim.
+  \item Rate each of the four verdict labels independently on a 1--5 Likert scale (rubric detailed below).
+\end{enumerate}
+
+The four verdict labels follow the AVeriTeC schema:
+\begin{itemize}
+  \item \textbf{Supported} --- evidence confirms the claim.
+  \item \textbf{Refuted} --- evidence contradicts the claim.
+  \item \textbf{Not Enough Evidence (NEI)} --- retrieved evidence does not address the claim.
+  \item \textbf{Conflicting Evidence} --- credible sources meaningfully disagree.
+\end{itemize}
+
+The final verdict is the label with the highest Likert score. Ties are broken in the order: Refuted $>$ Supported $>$ Conflicting Evidence $>$ NEI. The model also returns a step-by-step reasoning trace, a one-sentence justification, and a list of key source URLs.
+
+\paragraph{Likert rubric (abbreviated).}
+Each label is scored 1 (definitely does not apply) to 5 (definitely applies):
+\begin{itemize}
+  \item \textbf{Supported 5}: Two or more high-credibility sources ($\geq 0.6$) explicitly confirm the claim including its key qualifiers; no credible source disagrees.
+  \item \textbf{Refuted 5}: Two or more high-credibility sources ($\geq 0.6$) explicitly contradict a load-bearing qualifier; no credible source supports.
+  \item \textbf{NEI 5}: No retrieved item addresses the claim at all. NEI must score $\leq 2$ whenever any credible source ($\geq 0.5$) speaks to the claim's substance.
+  \item \textbf{Conflicting Evidence 5}: Two or more high-credibility sources on each side, supporting vs.\ refuting a load-bearing element.
+\end{itemize}
+
+\paragraph{FIRE iterative loop.}
+Rather than accepting the first-round verdict, the pipeline applies a Focused Iterative Retrieval and Evidence (FIRE) loop of up to 5 rounds to resolve uncertainty. After each verification round:
+\begin{enumerate}
+  \item Compute the \emph{label margin}: top Likert score minus second-highest. A high margin indicates the model is decided; a low margin indicates it is torn.
+  \item \textbf{Early exit}: if the verdict is not NEI and margin $\geq 4$ (the maximum possible margin), return the result immediately.
+  \item \textbf{NEI always continues}: if the verdict is NEI the model itself has declared insufficient evidence; always proceed to retrieve more.
+  \item If neither exit condition is met: generate a targeted follow-up search query via the LLM, focusing on the specific uncertainty in the reasoning trace. If the follow-up query is redundant with a previous query (cosine similarity $> 0.9$), stop and return the current result. Otherwise retrieve new evidence, deduplicate by URL against existing evidence, and repeat.
+\end{enumerate}
+
+\paragraph{Output.}
+A \texttt{VerdictResult} per claim: verdict label, Likert scores for all four labels, confidence (Likert score of winning label $/ 5$), reasoning trace, justification, and key source URLs.
+
+% -----------------------------------------------------------------------
+\subsection{Step 4: Post-Level Verdict Aggregation}
+
+When a post decomposes into multiple atomic claims, the per-claim verdicts are collapsed into a single post-level verdict using the following priority rule:
+
+\begin{enumerate}
+  \item If any sub-claim is \textbf{Refuted} with confidence $\geq 0.65$, the post verdict is \emph{Refuted}.
+  \item Else if any sub-claim is \textbf{Conflicting Evidence} with confidence $\geq 0.65$, the post verdict is \emph{Conflicting Evidence}.
+  \item Else if \emph{all} sub-claims are \textbf{Supported}, the post verdict is \emph{Supported}.
+  \item Otherwise the post verdict is \emph{Not Enough Evidence}.
+\end{enumerate}
+
+Post-level confidence is the maximum confidence among deciding sub-claims (for Refuted and Conflicting Evidence) or the mean across all sub-claims (for Supported and Not Enough Evidence). The confidence threshold of 0.65 is a tunable experimental parameter.
+
+This scheme is deliberately conservative: a single confidently-refuted sub-claim is sufficient to flag the entire post. For a nudging tool, false negatives (failing to warn about misinformation) are considered more costly than false positives for the interventions we are testing.
+
+% -----------------------------------------------------------------------
+\section{Evaluation}
+
+\subsection{Benchmark: AVeriTeC}
+
+We evaluate the pipeline against the AVeriTeC development split~\cite{schlichtkrull2023averitec}, which contains 500 claims sourced from professional fact-checking organisations. AVeriTeC uses the same four-class label schema as our pipeline (Supported, Refuted, Not Enough Evidence, Conflicting Evidence), making label alignment exact. Claims span a wide range of topics and originate from sources including Facebook, Twitter, and news broadcasts.
+
+The benchmark was chosen over alternatives (LiveFact, FEVER, X-FACT) primarily because of this label schema alignment and because its evidence was obtained via web retrieval, matching our pipeline's retrieval-based architecture. Limitations: AVeriTeC claims derive from news events rather than organic social media posts, and the dataset is English-only, meaning French-language performance cannot be assessed with this benchmark alone.
+
+Evaluation proceeds as follows. Each claim text is passed directly to the pipeline as a ``post''. The pipeline performs claim extraction, retrieval, verification, and aggregation. The resulting post-level verdict is compared against the gold label. Because AVeriTeC claims are already atomic, claim extraction typically returns a single sub-claim closely paraphrasing the input; multi-claim decompositions arise when the post contains compound assertions.
+
+\subsection{Results}
+
+Table~\ref{tab:results} reports pipeline verdicts and gold labels for a random sample of ten claims drawn from the AVeriTeC development split (seeds 0 and 1, five claims each). Results are shown for the fully equipped pipeline including the Fact Check Tools API, Wikipedia retrieval, and the scrape blocklist.
+
+\begin{table}[h]
+\centering
+\caption{Pipeline verdicts versus AVeriTeC gold labels on a ten-claim sample.}
+\label{tab:results}
+\begin{tabular}{clllc}
+\hline
+\textbf{\#} & \textbf{Claim (abbreviated)} & \textbf{Gold} & \textbf{Pipeline} & \textbf{Match} \\
+\hline
+1 & Trump canceled HR6666 (COVID-19 TRACE Act) & Refuted & Refuted & \checkmark \\
+2 & US--Africa trade declined under Trump & Supported & NEI & $\times$ \\
+3 & Rhea Chakraborty's father's public statement & Refuted & NEI & $\times$ \\
+4 & Fox News unavailable in Canada & Refuted & Refuted & \checkmark \\
+5 & Nigeria: 52\% urban population & Supported & Refuted & $\times$ \\
+\hline
+6 & Biden quote on transgender children & NEI & Refuted & $\times$$^\dagger$ \\
+7 & RBG campaigned to lower age of consent & Refuted & Refuted & \checkmark \\
+8 & Trump canceled Bill Gates' ID2020 & Refuted & Refuted & \checkmark \\
+9 & Raj Thackeray would welcome Kangana Ranaut & Refuted & Refuted & \checkmark \\
+10 & Schools resumed in New Brunswick, Canada & Supported & NEI & $\times$ \\
+\hline
+\multicolumn{4}{l}{\textbf{Overall accuracy}} & \textbf{5/10 (50\%)} \\
+\hline
+\end{tabular}
+\\[4pt]
+\footnotesize $^\dagger$ Four professional fact-checkers (AP, USA Today, PolitiFact, Snopes) rated this claim as false. The AVeriTeC label of \emph{Not Enough Evidence} reflects a stricter interpretation of the exact wording.
+\end{table}
+
+\subsection{Error Analysis}
+
+Inspection of the five misses reveals three distinct failure modes.
+
+\paragraph{Retrieval coverage gaps (claims 3, 10).}
+Claim 3 (a statement attributed to a Bollywood celebrity's father) returned zero scraped evidence items: the claim is too niche and regional for English-language web search to surface relevant sources. Claim 10 (school reopening in New Brunswick) retrieved sources about Canada's pandemic response generally, but the LLM could not find a sentence explicitly confirming New Brunswick specifically and defaulted to \emph{Not Enough Evidence}. Both cases reflect a limitation of Serper-based web retrieval: coverage is uneven for regional or low-salience claims.
+
+\paragraph{Date sensitivity (claim 5).}
+The claim that 52\% of Nigeria's population lives in urban areas was made in 2020. The verifier retrieved a 2024 Statista figure of 62.98\% and concluded the claim was \emph{Refuted}. Although the date ceiling was passed to Serper, the LLM used its own parametric knowledge of current statistics rather than strictly anchoring to the evidence published before the claim date. This is a known failure mode for retrieval-augmented generation with time-sensitive numerical claims; per-document summarization with explicit temporal anchoring (see IDEA-007) is a targeted fix.
+
+\paragraph{Label disagreement (claim 6).}
+The pipeline rated the Biden transgender quote as \emph{Refuted}, consistent with verdicts issued by four independent fact-checking organisations via the Fact Check Tools API. AVeriTeC's gold label of \emph{Not Enough Evidence} reflects a stricter interpretation: because the exact wording of the quote could not be positively confirmed, AVeriTeC declines to call it fabricated. This is a genuine annotation disagreement rather than a pipeline error.
+
+\paragraph{Summary.}
+Of the five misses: two are retrieval coverage failures amenable to improved source diversity; one is a date-anchoring failure in the verification prompt; one is a label disagreement with the benchmark annotation. The remaining correct predictions include a compound claim (claim 9) that was correctly decomposed into sub-claims and aggregated to a post-level \emph{Refuted} verdict via the priority rule, demonstrating that the aggregation scheme functions as intended.

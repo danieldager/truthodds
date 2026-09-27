@@ -1,0 +1,935 @@
+# Mechanisms inventory — claim-extraction chain (pass 1 -> pass 2 -> gate/handoff -> sampling)
+# Total-transparency enumeration: every constant, regex, guard, prompt-rule, config knob and
+# data contract in the four claim_sourcing scripts. One entry per distinct mechanism.
+# Sources swept: extract_tweet_claims.py, normalize_tweet_claims.py, build_verify_input.py,
+# sample_survey_subsets.py, draw_dev500b.py. WHY column cites dated decisions from
+# clog/140726.md, clog/150726.md, clog/160726.md, docs/system_snapshot_2026-07-13.md.
+
+# ============================================================================
+# PASS 1 — extract_tweet_claims.py (Qwen3-VL multimodal, per-post extraction)
+# ============================================================================
+
+- id: p1-model
+  name: Pass-1 extraction model
+  kind: config
+  where: extract_tweet_claims.py:20 (MODEL, --model)
+  what: >-
+    Default extraction model is Qwen3-VL-30B-A3B-Instruct on DeepInfra; overridable with
+    --model. Multimodal (text + up to 4 images) unless --no-images.
+  why: >-
+    30B-A3B locked as production extractor (235B only +4pp, not worth it); see project memory
+    project_stage2_extraction. Production canonical chain is actually double DeepSeek-V4-Flash
+    non-thinking text-only per project_extraction_chain_config — the script default differs.
+  params: 'MODEL = "Qwen/Qwen3-VL-30B-A3B-Instruct"; BASE = deepinfra /v1/openai'
+  failure_modes: >-
+    Script default (Qwen3-VL) contradicts the recorded canonical config (DeepSeek-V4-Flash
+    text-only). A caller trusting defaults would run a different model than the audited chain.
+
+- id: p1-text-only-toggle
+  name: TEXT_ONLY / --no-images
+  kind: config
+  where: extract_tweet_claims.py:21, 109-115
+  what: >-
+    When set, images are not fetched or sent; extraction runs from post text alone. Otherwise
+    up to 4 images per post are fetched and base64-inlined.
+  why: >-
+    Text-only is the recorded canonical extraction mode (project_extraction_chain_config).
+    Image path exists to exercise from_image extraction.
+  params: 'TEXT_ONLY = False (default); flipped True by --no-images'
+  failure_modes: 'Default sends images, so default run is NOT the text-only canonical config.'
+
+- id: p1-temperature
+  name: Deterministic decoding (temperature 0)
+  kind: constant
+  where: extract_tweet_claims.py:78
+  what: 'All extraction calls use temperature 0 for reproducibility.'
+  why: 'Determinism for a measurement pipeline; reduces run-to-run claim drift.'
+  params: 'temperature: 0'
+  failure_modes: >-
+    Temperature 0 does not eliminate drift — the MSNOW "sources say" attribution boundary was
+    still measured bistable run-to-run (clog/140726), which is why type repair moved to code.
+
+- id: p1-max-tokens
+  name: max_tokens by thinking-mode
+  kind: constant
+  where: extract_tweet_claims.py:76-77
+  what: >-
+    Response cap is 8000 tokens if the model id contains "Thinking" (room for reasoning + JSON),
+    else 1000.
+  why: 'Thinking models need headroom for chain-of-thought before the JSON payload.'
+  params: 'mt = 8000 if "Thinking" in MODEL else 1000'
+  failure_modes: 'A verbose non-thinking model with many claims could truncate JSON at 1000 tokens.'
+
+- id: p1-forced-json
+  name: Forced JSON response_format
+  kind: config
+  where: extract_tweet_claims.py:81-82
+  what: >-
+    For non-thinking models the request sets response_format json_object, which also suppresses
+    thinking models emitting reasoning into content (they emit clean JSON).
+  why: 'Reliable structured output; avoids parsing prose around the JSON.'
+  params: 'response_format = {"type": "json_object"} (only when "Thinking" not in MODEL)'
+  failure_modes: 'Thinking models get no forced JSON; rely on the {.*} regex extractor instead.'
+
+- id: p1-json-extract
+  name: JSON extraction from model output (_obj)
+  kind: code-guard
+  where: extract_tweet_claims.py:53-61 (also normalize.py:55-61)
+  what: >-
+    Strips <think>...</think> spans, then greedily regex-matches the first {...} block and
+    json.loads it; returns {} on failure.
+  why: 'Tolerates thinking traces and prose wrappers around the JSON object.'
+  params: 're.sub(r"<think>.*?</think>","",...); re.search(r"\{.*\}", txt, re.S)'
+  failure_modes: >-
+    Greedy {.*} can over-capture if the model emits two JSON objects or braces inside prose;
+    a malformed object silently becomes {} (post yields no claims, counted as no_claim).
+
+- id: p1-image-cap
+  name: Image cap (first 4)
+  kind: constant
+  where: extract_tweet_claims.py:112
+  what: 'At most the first 4 image URLs of a post are fetched and sent to the model.'
+  why: 'Bounds token cost per post (Qwen3-VL ~1MP≈1024 tokens, reference_qwen3vl_image_tokens).'
+  params: 'imgs[:4]'
+  failure_modes: 'Posts with >4 images lose later images; a claim living only in image 5+ is missed.'
+
+- id: p1-image-fetch
+  name: Image fetch (_fetch_b64)
+  kind: code-guard
+  where: extract_tweet_claims.py:64-72
+  what: >-
+    Fetches each image URL with a browser User-Agent, 20s timeout, base64-encodes with the
+    server Content-Type; returns None (image skipped) on any exception.
+  why: 'Inline data URIs so DeepInfra receives the bytes; browser UA dodges naive hotlink blocks.'
+  params: 'timeout=20; UA "Mozilla/5.0"; default ct image/jpeg'
+  failure_modes: 'Silently drops unreachable/expired image URLs (deleted-X media); no retry.'
+
+- id: p1-retry
+  name: HTTP retry/backoff
+  kind: code-guard
+  where: extract_tweet_claims.py:86-100
+  what: >-
+    Up to 4 attempts; on HTTP 429/500/502/503 sleeps 3*2^a and retries; other HTTP codes print
+    and return {}; network errors also back off. Per-call timeout 300s.
+  why: 'Absorbs DeepInfra rate limits / transient 5xx without failing the run.'
+  params: 'retries=4; sleep 3*2**a; retry on {429,500,502,503}; urlopen timeout=300'
+  failure_modes: 'Exhausted retries return {} => post silently yields no claims (looks like no_claim).'
+
+- id: p1-concurrency
+  name: Thread-pool concurrency
+  kind: config
+  where: extract_tweet_claims.py:273, 290
+  what: 'Posts processed by a ThreadPoolExecutor, default 6 workers (--concurrency).'
+  why: 'Throughput on I/O-bound API calls.'
+  params: '--concurrency default 6'
+  failure_modes: 'Higher concurrency can trip DeepInfra 429s (handled by retry).'
+
+- id: p1-balanced-sample
+  name: Balanced image/text sampling (--per-handle)
+  kind: code-guard
+  where: extract_tweet_claims.py:138-146
+  what: >-
+    When --per-handle N is set, samples per handle ~half image-bearing and half text-only to
+    exercise the from_image path; 0 = all posts.
+  why: 'Development sampling to stress the multimodal path; not used in the locked survey draw.'
+  params: 'take_i = wi.head(per_handle//2); take_n = ni.head(per_handle - len(take_i))'
+  failure_modes: 'Uses head() not random — first-N bias; dev convenience only.'
+
+- id: p1-checkworthy-hardcoded
+  name: Pass-1 checkworthy = True (decorative)
+  kind: data-contract
+  where: extract_tweet_claims.py:127-131
+  what: >-
+    Every pass-1 claim row is written with checkworthy=True. Pass 1 explicitly does NOT judge
+    checkworthiness — the gate is a code rule at the handoff.
+  why: >-
+    Daniel 2026-07-14 (clog/140726): pass-1 cw was "98%-true decorative"; the checkworthy
+    decision was moved to a tunable CODE rule in build_verify_input. Flags carry the signal.
+  params: '"checkworthy": True (constant); falsifiable default True, trivial/unresolved default False'
+  failure_modes: 'None — value is ignored downstream; the gate recomputes cw from flags.'
+
+# ---- Pass-1 SYSTEM prompt rules (one entry per rule) ----
+
+- id: p1r-extract-everything
+  name: Extract-everything mandate
+  kind: prompt-rule
+  where: extract_tweet_claims.py:31 (SYSTEM opening)
+  what: >-
+    Extract EVERY claim a fact-checker COULD check and RESOLVE each so it is checkable alone;
+    do not judge truth or importance (a later step filters). Include dubious/false-looking claims.
+  why: 'Never-drop principle (clog/140726 v3.2): a later gate/verifier judges; extraction is recall-first.'
+  params: '"Extract EVERY claim... RESOLVE each one so it IS checkable on its own"'
+  failure_modes: 'Recall-first over-extracts benign/ceremonial claims (~17% over-inclusion, clog/140726 15:10).'
+
+- id: p1r-assertion-def
+  name: Assertion definition (incl. anonymous/hedged sourcing)
+  kind: prompt-rule
+  where: extract_tweet_claims.py:34
+  what: >-
+    An assertion is a fact stated in the outlet's own voice (event/action/ruling/number/date/
+    causal link). Facts via anonymous or hedged sourcing ("sources say", "reportedly",
+    "officials confirmed") are ASSERTIONS — the content is what gets checked.
+  why: 'Anonymous sourcing = assertion because the content, not the saying, is the news (clog/140726).'
+  params: '"sources say", "reportedly", "officials confirmed" -> assertion'
+  failure_modes: >-
+    The LLM flips on this boundary run-to-run (MSNOW measured bistable) — backstopped by the
+    code rule _repair_type / _ANON_SRC at the handoff.
+
+- id: p1r-attribution-def
+  name: Attribution definition (X said Y, speaker in text)
+  kind: prompt-rule
+  where: extract_tweet_claims.py:35
+  what: >-
+    An attribution is a report that an identifiable person/group/org SAID something. Phrase
+    "X said Y" with the speaker IN the claim text. One quote = ONE claim however many sentences.
+    Attributed opinion is still an attribution (that they said it is checkable).
+  why: >-
+    Attribution-aware nudging (open question, src/CLAUDE.md): a true attribution of a false
+    claim must not be flagged as the outlet lying — the speaker must be verifiable.
+  params: '"Phrase it \"X said Y\" — the speaker must be IN the claim text"'
+  failure_modes: 'Atomization can strip the speaker binding (28% unbound on early smokes; ~11-14% after).'
+
+- id: p1r-never-split-frame
+  name: Never split frame + bare content
+  kind: prompt-rule
+  where: extract_tweet_claims.py:35
+  what: >-
+    If the post REPORTS (not endorses) that someone claims Y, emit ONE attribution and never a
+    standalone assertion of Y.
+  why: 'Prevents a reported false claim from becoming a bare (verifiable-as-false) assertion of Y.'
+  params: '"emit ONE attribution and never a standalone assertion of Y"'
+  failure_modes: 'Boundary with amplification (below) is subtle; prompt wording see-sawed (clog/140726).'
+
+- id: p1r-amplification
+  name: Amplification exception (quote as own message -> assertion)
+  kind: prompt-rule
+  where: extract_tweet_claims.py:35
+  what: >-
+    A quote the outlet posts AS its own message (no reporting frame around the saying) asserts
+    the content: extract as ASSERTION. Attribution is only for when the SAYING is the news.
+  why: >-
+    Daniel C-section ruling 2026-07-14 (clog/140726): typing amplified content "X said Y" would
+    let false content verify as a true saying. Prompt version see-sawed; backstopped structurally
+    at the handoff (_is_amplification_post).
+  params: '"the outlet speaks through the quote... extract it as an ASSERTION"'
+  failure_modes: 'Prompt-only version broke Rothkopf once and was reverted; structural code rule is authoritative.'
+
+- id: p1r-no-flourish-weld
+  name: No trivial-flourish welding
+  kind: prompt-rule
+  where: extract_tweet_claims.py:35 (also normalize rule 1)
+  what: >-
+    Never weld a trivial verbatim flourish ("We got him") onto a substantive claim; extract the
+    substantive fact and leave the flourish out.
+  why: 'Daniel 30-claim review 2026-07-14 (clog/140726): keeps claims clean/verifiable.'
+  params: '"never weld a trivial verbatim flourish (\"We got him\") onto a substantive claim"'
+  failure_modes: 'Judgment call on what is "trivial flourish" vs load-bearing quote.'
+
+- id: p1r-resolve
+  name: RESOLVE each claim (self-contained, faithful)
+  kind: prompt-rule
+  where: extract_tweet_claims.py:37
+  what: >-
+    Name who/what/when from the post (even if named only later in it), keep meaning exact, never
+    invert who-does-what-to-whom, add no fact the post does not support.
+  why: 'A claim must be checkable in isolation; faithfulness prevents fabricated/inverted claims.'
+  params: '"never invert who does what to whom; add no fact the post does not support"'
+  failure_modes: 'Dangling-referent extraction still occurs when the antecedent is elsewhere (clog/140726 15:10).'
+
+- id: p1r-own-opinion-excluded
+  name: Outlet own-voice opinion is not an assertion
+  kind: prompt-rule
+  where: extract_tweet_claims.py:39
+  what: >-
+    The outlet's own opinion/prediction/normative take is not a checkable claim: scare-quoted
+    judgments, what something "shows"/"proves"/"screams for", exhortations, characterizations
+    with no checkable event underneath. Test: EVENT/ACTION/QUANTITY/SAYING (extract) vs
+    EVALUATION/EXHORTATION (don't).
+  why: 'Own opinion is not misinformation to nudge; but see falsifiability line — it is KEPT+flagged in pass 2.'
+  params: '"is the load-bearing proposition an EVENT, ACTION, QUANTITY, or SAYING ... or an EVALUATION"'
+  failure_modes: 'Pejorative/hedged wording wrongly read as opinion (12/101 wrongful removals in v3.1 audit).'
+
+- id: p1r-falsifiability-line
+  name: Falsifiability dividing line (sarcasm/hedges never exempt)
+  kind: prompt-rule
+  where: extract_tweet_claims.py:39
+  what: >-
+    The dividing line is FALSIFIABILITY: if the proposition states something evidence could
+    refute, it is a claim. Sarcasm, scorn, or hedges ("supposedly", "apparently") NEVER make it
+    opinion. Charged-but-checkable IS extracted; bias in wording is fine, evaluation-as-substance
+    is not.
+  why: >-
+    Daniel 2026-07-14 13:30 (clog/140726): "misinformation lives in hedged claims that bias the
+    reader while keeping deniability." MotherJones white-genocide case is the verbatim in-prompt
+    example.
+  params: '"every single refugee we’ve let in since December is supposedly fleeing white genocide" = falsifiable'
+  failure_modes: 'Falsifiable flag still wobbles (OD pedophile claim reached verify — clog/150726 02:30).'
+
+- id: p1r-no-claim-reasons
+  name: no_claim_reason vocabulary
+  kind: prompt-rule
+  where: extract_tweet_claims.py:41
+  what: >-
+    If the post makes no extractable claim, return [] with a reason: "promo" (self-promotion/
+    subs/merch), "opinion" (only outlet opinion/rhetoric, incl. an opinion-piece teaser), or
+    "other" (no proposition — bare link, caption, joke).
+  why: 'Daniel 2026-07-14 (clog/140726): fixed reason set; opinion-vs-promo teaser distinction resolved.'
+  params: 'no_claim_reason in {"promo","opinion","other", null}'
+  failure_modes: 'WATCH-LIVE / headline-question teaser boundary flagged unresolved (clog/140726 discuss items).'
+
+- id: p1r-flag-falsifiable
+  name: Flag definition — falsifiable
+  kind: prompt-rule
+  where: extract_tweet_claims.py:44
+  what: >-
+    falsifiable=true if the proposition states a vision of reality evidence available NOW could
+    refute (event/action/quantity/ruling/saying); false for pure evaluation, exhortation, or
+    future prediction. Sarcasm/hedges never flip it.
+  why: 'v3.2/v4 (clog/140726): falsifiable is the gold-standard gate signal for misinfo-per-source.'
+  params: '"falsifiable": true | false'
+  failure_modes: 'Predictions ("clashes expected imminently") are an unclear class (clog/140726 12:45).'
+
+- id: p1r-flag-trivial
+  name: Flag definition — trivial
+  kind: prompt-rule
+  where: extract_tweet_claims.py:45
+  what: >-
+    trivial=true if the claim's truth carries no public weight — trivia, routine/procedural
+    detail, self-evident/uncontested facts, private lives/inner states of ordinary individuals.
+  why: 'Dilution guard; renamed from "controversial" (inverted polarity) in v3.2 (clog/140726).'
+  params: '"trivial": true | false'
+  failure_modes: >-
+    Trivial recall measured ~21% (Opus audit clog/140726 17:35) — most trivia NOT flagged; this
+    is why trivial was UN-GATED in gate v5.
+
+- id: p1r-flag-unresolved
+  name: Flag definition — unresolved (searcher test)
+  kind: prompt-rule
+  where: extract_tweet_claims.py:46
+  what: >-
+    unresolved=true ONLY if verification could not even BEGIN because a load-bearing referent
+    can't be identified. Test: given the claim + post date, could a searcher pin down WHICH
+    person/event/document? Missing detail is not unresolved; when in doubt, false.
+  why: >-
+    Daniel 2026-07-14 13:30 re-anchor (clog/140726): unresolved means "referent unfindable by
+    search", NOT "not fully spelled out" (MintPress clause-one over-fired). Narrow successor of
+    the retired self_contained flag.
+  params: 'NOT unresolved: definite refs, quantified classes, named-actor current events; unresolved: unnamed event/anon collective'
+  failure_modes: 'Over-fired ~70% in v3.1 audit; re-anchored; still over-fires on anon-official assertions (fixed by retype clearing unres).'
+
+- id: p1-output-schema
+  name: Pass-1 output JSON schema
+  kind: data-contract
+  where: extract_tweet_claims.py:48-50
+  what: >-
+    Returns {"claims":[{claim,type,falsifiable,trivial,unresolved}], "no_claim_reason": ...};
+    no_claim_reason set only when claims is empty.
+  why: 'Structured handoff to the HTML payload consumed by pass 2.'
+  params: 'type in {"assertion","attribution"}; three booleans; no_claim_reason nullable'
+  failure_modes: 'Malformed JSON -> _obj returns {} -> post recorded as no_claim with reason None.'
+
+# ============================================================================
+# PASS 2 — normalize_tweet_claims.py (audit/correct, 235B instruct default)
+# ============================================================================
+
+- id: p2-model
+  name: Pass-2 audit model
+  kind: config
+  where: normalize_tweet_claims.py:101
+  what: 'Default Qwen3-235B-A22B-Instruct-2507; overridable with --model; concurrency default 10.'
+  why: 'Fast instruct model to audit/correct pass-1 output. Canonical config uses DeepSeek-V4-Flash (project memory).'
+  params: 'default "Qwen/Qwen3-235B-A22B-Instruct-2507"; --concurrency 10'
+  failure_modes: 'Default (235B) differs from recorded canonical double-DeepSeek-V4-Flash chain.'
+
+- id: p2-decode
+  name: Pass-2 decoding params
+  kind: constant
+  where: normalize_tweet_claims.py:72-75
+  what: 'temperature 0; max_tokens 8000 if "Thinking" else 1500; forced json_object for non-thinking.'
+  why: 'Determinism + structured output; 1500 headroom for corrected claims + removal ledger.'
+  params: 'temperature 0; max_tokens 8000/1500; response_format json_object (non-thinking)'
+  failure_modes: 'Posts with very many claims + removals could truncate at 1500.'
+
+- id: p2-anchor-guard
+  name: Text-anchoring guard (anchored, 60%)
+  kind: code-guard
+  where: normalize_tweet_claims.py:38-52, 117-127
+  what: >-
+    A pass-2 claim must be built from the post's (or pass-1's) own words: true if >=60% of the
+    claim's content tokens (len>2, lowercased) appear in the post+pass-1 token pool. If not
+    anchored, fall back to the closest pass-1 claim text; if that also fails, keep but count it.
+  why: >-
+    Corruption/drift guard — the normalizer injected CJK tokens (observed 2026-07-13); kills the
+    CJK-corruption class (clog/140726). Anchor guard ran 0 corruptions on the dev-500 rerun.
+  params: 'len(ct & pool)/len(ct) >= 0.6; token regex [a-z0-9][a-z0-9\x27\-]* len>2'
+  failure_modes: >-
+    Legitimate heavy rewording (translation/paraphrase) could fall below 60% and be reverted to
+    a rawer pass-1 claim; unrepairable cases are kept anyway (counted, not blocked).
+
+- id: p2-removal-ledger
+  name: Removal ledger + unaccounted backfill (no silent drops)
+  kind: code-guard
+  where: normalize_tweet_claims.py:132-147
+  what: >-
+    Records every model-declared removal with its reason, then scans every pass-1 claim: if a
+    pass-1 claim is neither covered by a kept claim (>=50% token overlap) nor by a recorded
+    removal, it is appended to the ledger as reason "unaccounted".
+  why: >-
+    Daniel 2026-07-14 (clog/140726): "silent drops impossible" — the record must show every
+    pass-1 claim and why it will not be verified.
+  params: 'coverage = any(len(t1 & kt)/len(t1) >= 0.5 ...); fallback reason "unaccounted"; missing model reason -> "unspecified"'
+  failure_modes: 'Token-overlap coverage at 0.5 is heuristic; a heavily-reworded kept claim could still mark its source "unaccounted".'
+
+- id: p2-nr-coerce
+  name: no_claim_reason coercion
+  kind: code-guard
+  where: normalize_tweet_claims.py:148-150
+  what: >-
+    If claims remain, nr=None; else coerce the model's reason to {promo,opinion,other} (anything
+    else -> "other").
+  why: 'Guarantees a valid enum in the payload even if the model emits an off-vocabulary reason.'
+  params: 'nr if nr in ("promo","opinion","other") else "other"'
+  failure_modes: 'A genuinely-informative off-vocab reason is flattened to "other".'
+
+# ---- Pass-2 SYSTEM prompt rules ----
+
+- id: p2r-account-everything
+  name: Account for every removed claim
+  kind: prompt-rule
+  where: normalize_tweet_claims.py:22
+  what: >-
+    Given the POST and its extracted claims, return the corrected final set and account for
+    EVERY claim removed; nothing is ever silently dropped.
+  why: 'Auditability (clog/140726): the removal ledger is the auditable record of the audit pass.'
+  params: '"account for EVERY claim you remove; nothing is ever silently dropped"'
+  failure_modes: 'Model may fail to list a removal -> code backfills as "unaccounted".'
+
+- id: p2r-merge-connected
+  name: Rule 1 — merge only logically connected + dedupe subsumption
+  kind: prompt-rule
+  where: normalize_tweet_claims.py:25
+  what: >-
+    Merge ONLY claims that are logically connected (one qualifies/completes the other, must be
+    verified together). Standalone claims stay alone; never merge for topical similarity. One
+    quote = one attribution. DEDUPE SUBSUMPTION: if one kept claim fully contains another, keep
+    the fuller, remove the contained as "duplicate".
+  why: 'Daniel artifact review 2026-07-14 (clog/140726 15:10): subsumption redundancy ~6% of cw budget.'
+  params: 'remove reason "duplicate" for subsumed; "merged" for folded-in'
+  failure_modes: 'Over-merging loses independently-checkable claims; under-merging leaves redundancy (~6%).'
+
+- id: p2r-fix-type
+  name: Rule 2 — fix type (attribution needs named attributee)
+  kind: prompt-rule
+  where: normalize_tweet_claims.py:26
+  what: >-
+    Attributions are statements from an identifiable person/group/org, phrased "X said Y" with
+    the speaker in the text. Anonymous "sources say"/"reportedly" = assertion. An attribution
+    naming no identifiable attributee is the outlet's own voice: retype or remove. Amplified
+    quote (no reporting frame) = assertion; a reported saying keeps attribution.
+  why: 'Same boundary as pass 1; here it is a correction step. Backstopped by code (_repair_type).'
+  params: '"If a claim is typed attribution but names no identifiable attributee ... retype it or remove it"'
+  failure_modes: 'LLM still mislabels named quotes as assertion (2 cases, clog/140726 18:40); code + audit catch residue.'
+
+- id: p2r-remove-artifacts-only
+  name: Rule 3 — remove only extraction artifacts; never real events; deaths always kept
+  kind: prompt-rule
+  where: normalize_tweet_claims.py:27
+  what: >-
+    Remove ONLY duplicate/merged/not_a_claim. not_a_claim is for slogan/exhortation/question/
+    bare link — NEVER for a real reported event (death, anniversary, rescue), however terse.
+    A reported DEATH is always kept ("X dies at 75" asserts X died — false death reports are
+    classic misinfo). The outlet's OWN opinion is NEVER removed: keep it, set falsifiable=false.
+  why: >-
+    Daniel 2026-07-14 17:20 gate v4 (clog/140726): own-voice opinion NO LONGER removed (kept +
+    falsifiable=false); headline-style events must not be destroyed (v3.1 wrongly removed 12/101).
+  params: 'removed reasons in {"duplicate","merged","not_a_claim"}; opinion kept with falsifiable=false'
+  failure_modes: >-
+    infowars TPUSA headline post was wiped whole (incl. "Charlie Kirk was murdered") in the v4
+    audit (clog/140726 18:40) — headline-post not_a_claim tweak still open.
+
+- id: p2r-stay-faithful
+  name: Rule 4 — stay faithful
+  kind: prompt-rule
+  where: normalize_tweet_claims.py:28
+  what: >-
+    Correct wording only against the post; never invert who does what to whom; add no facts. Add
+    a claim only if the extractor plainly missed one that is in the post.
+  why: 'Prevents the audit pass from fabricating or inverting claims.'
+  params: '"never invert who does what to whom; add no facts"'
+  failure_modes: 'A hallucinated "missed" claim would slip past unless it fails the anchor guard.'
+
+- id: p2r-flags-rejudge
+  name: Rule 5 — re-judge the three flags
+  kind: prompt-rule
+  where: normalize_tweet_claims.py:29
+  what: >-
+    Re-judge falsifiable/trivial/unresolved (pass-1 values shown; correct when wrong). Includes
+    detailed anchors: falsifiable false only for own evaluation/prediction; hedged empirical is
+    falsifiable; attributed saying with named speaker is falsifiable; trivial includes the
+    setting/occasion of ANOTHER claim; unresolved = referent unfindable by search.
+  why: >-
+    Pass 2 is shown pass-1 flags and corrects them; the "occasion of another claim -> trivial"
+    and "hedged-empirical is falsifiable (mercola flip)" clauses came from Daniel's rulings
+    (clog/140726). Note fix 13:30: rule 5 had been written in inverted "controversial" polarity.
+  params: 'flags: falsifiable/trivial/unresolved re-emitted per kept claim'
+  failure_modes: 'Pass 2 re-added unresolved even against the in-prompt example until class/date carve-outs were tightened (clog/140726 13:30).'
+
+- id: p2r-topic
+  name: Rule 6 — topic label (12-way, subject-not-venue)
+  kind: prompt-rule
+  where: normalize_tweet_claims.py:30
+  what: >-
+    Label each kept claim exactly one topic. Label the SUBJECT of the proposition, not the
+    occasion/venue: a riot after a game is crime not sports; a celebrity arrest is crime; any
+    claim about health effects/nutrition/calories is health not lifestyle.
+  why: >-
+    Daniel audit (clog/140726 15:40): topic venue-vs-subject rule fixes MintPress Minab
+    atrocity-as-sports (the highest-stakes topic leak). "education" was added after the Ivy case.
+  params: >-
+    topics: politics, crime, health, education, business, science, technology, entertainment,
+    sports, disaster, lifestyle, other
+  failure_modes: >-
+    Topic no longer gates (INCLUDE_TOPICS=None) so mislabels no longer drop claims, but sports-
+    masking of atrocities remains a per-topic-analysis risk (celebrity-crime bistable still open).
+
+- id: p2-output-schema
+  name: Pass-2 output JSON schema
+  kind: data-contract
+  where: normalize_tweet_claims.py:34-35
+  what: >-
+    Returns {"claims":[{claim,type,falsifiable,trivial,unresolved,topic}],
+    "removed":[{claim,reason}], "no_claim_reason": ...}.
+  why: 'Structured audit output: kept claims + removal ledger + post-level reason.'
+  params: 'reason in {"duplicate","merged","not_a_claim"}; topic in the 12-way set'
+  failure_modes: 'Off-vocab reason/topic tolerated downstream (coerced or passed through).'
+
+- id: p2-payload-format
+  name: Payload HTML data contract
+  kind: data-contract
+  where: normalize_tweet_claims.py:157-159, 91-93; extract_tweet_claims.py:204
+  what: >-
+    Both passes embed the data as a JSON <script id="data"> inside an HTML file; pass 2 reads
+    pass-1's payload and writes its own; </ is escaped to <\/ to survive HTML embedding.
+  why: 'Single self-contained review artifact doubles as the machine handoff (build_verify_input reads it).'
+  params: 're.search r\x27<script type="application/json" id="data">(.*?)</script>\x27; .replace("</","<\\/")'
+  failure_modes: 'U+FFFD chars from broken scrape encodings 400 the artifact deploy (clog/160726) — extraction side unaffected.'
+
+# ============================================================================
+# GATE + HANDOFF — build_verify_input.py
+# ============================================================================
+
+- id: gate-include-topics
+  name: INCLUDE_TOPICS toggle
+  kind: config
+  where: build_verify_input.py:56
+  what: >-
+    Topic-based gating switch. None = OFF (topics do not gate). If set to a topic set, only
+    those topics pass the gate.
+  why: >-
+    Daniel 2026-07-14 17:20 gate v4 (clog/140726): topics no longer gate — topic became a
+    post-hoc analysis dimension (per-topic veracity). Kept re-enableable.
+  params: 'INCLUDE_TOPICS = None (re-enable e.g. {"politics","crime","health","education","business","science","technology","disaster"})'
+  failure_modes: 'With topics off, sports-masking of atrocities no longer drops them but no longer routes by topic either.'
+
+- id: gate-on-trivial
+  name: GATE_ON_TRIVIAL toggle
+  kind: config
+  where: build_verify_input.py:58
+  what: 'Whether the trivial flag gates a claim out. False = OFF (trivial claims still pass; flag travels for analysis).'
+  why: >-
+    Daniel 2026-07-14 19:10 gate v5 (clog/140726): trivial UN-GATED after the recall audit
+    showed ~21% trivial recall — too low (~19-24% junk still passing) to carry a load-bearing role.
+  params: 'GATE_ON_TRIVIAL = False'
+  failure_modes: >-
+    Off means ~19-24% low-weight junk (award tallies, tour dates, rosters) enters verify —
+    dilution + cost, accepted deliberately since tweets are hand-selected.
+
+- id: gate-formula
+  name: The checkworthy gate formula (_gate)
+  kind: code-guard
+  where: build_verify_input.py:60-68
+  what: >-
+    checkworthy = falsifiable AND NOT unresolved (AND NOT trivial when GATE_ON_TRIVIAL, AND
+    topic in INCLUDE_TOPICS when configured). Pure flag algebra — a code rule, not an LLM judgment.
+  why: >-
+    Daniel 2026-07-14 redesign (clog/140726): falsifiable = gold-standard misinfo-per-source
+    criterion; unresolved = measurability constraint (verify can't search an unpinnable referent).
+    A brief disorder-keyword override was removed as "inelegant".
+  params: 'if not falsifiable or unresolved: False; then GATE_ON_TRIVIAL/INCLUDE_TOPICS checks'
+  failure_modes: 'Inherits falsifiable-flag wobble (OD pedophile claim reached verify) and unresolved over-fire (mitigated by retype clearing unres).'
+
+- id: gate-cw-legacy
+  name: Legacy cw passthrough vs code gate
+  kind: code-guard
+  where: build_verify_input.py:254
+  what: >-
+    If a claim carries an LLM "cw" field (legacy payloads), it is used verbatim; otherwise cw is
+    computed by _gate from the flags (v3 path).
+  why: 'Back-compat with older payloads while v3 payloads use the code gate.'
+  params: 'cw = bool(c["cw"]) if "cw" in c else _gate(topic, claim, triv, unres, fals)'
+  failure_modes: 'A stray legacy cw field would bypass the code gate silently.'
+
+- id: repair-anon-source
+  name: Anonymous-sourcing retype (_ANON_SRC / _NAMED_SPEAKER)
+  kind: regex
+  where: build_verify_input.py:81-85, 116-123
+  what: >-
+    An attribution whose only sourcing is anonymous ("sources say", "officials confirmed") with
+    NO named speaker is retyped to ASSERTION — the content is what gets checked.
+  why: >-
+    Locked design (clog/140726): the LLM flips on this boundary run-to-run (MSNOW measured
+    bistable). Code repair makes the type deterministic.
+  params: >-
+    _ANON_SRC = (sources?|officials?|insiders?|witnesses|authorities|reports?)\s+(say|says|said|
+    claims?|claimed|told|confirm(ed)?|reveal(ed)?); retype iff _ANON_SRC and not _NAMED_SPEAKER
+  failure_modes: 'Regex-based — a paraphrased anonymous source ("word from the ministry is...") is missed.'
+
+- id: repair-amplification
+  name: Amplification retype (_QUOTE_SPANS / _is_amplification_post)
+  kind: regex
+  where: build_verify_input.py:94-102, 121-122
+  what: >-
+    A post that is a quotation + a name/@handle with NO reporting speech verb OUTSIDE the quotes
+    is the outlet speaking through the quote: its attribution claims (with a named speaker) are
+    retyped to ASSERTION.
+  why: >-
+    Daniel C-section ruling 2026-07-14 (clog/140726 22-24): typing amplified content "X said Y"
+    would let false content verify as a true saying. Implemented STRUCTURALLY after prompt wording
+    see-sawed (broke Rothkopf).
+  params: '_QUOTE_SPANS = [“"][^”"]{10,}[”"]; amplification = has quote span AND no _SPEECH_VERB outside quotes'
+  failure_modes: 'Quote-detection needs curly/straight quotes >=10 chars; unquoted paraphrase-amplification is missed.'
+
+- id: repair-clears-unres
+  name: Retype clears unresolved
+  kind: code-guard
+  where: build_verify_input.py:247-252
+  what: >-
+    When a claim is retyped (anon-sourcing or amplification), its unresolved flag is forced False
+    — anonymous/hedged SOURCING is an assertion whose content gets verified, not "unresolved".
+  why: >-
+    Opus panel 2026-07-14 (clog/140726 18:40, Gaza-official case): unresolved over-fired on
+    anon-official assertions; retype and flag must agree. Added +3 cw (491->494).
+  params: 'if repaired: unres = False'
+  failure_modes: 'None recorded; couples the retype and flag as intended.'
+
+- id: flag-private-inner-state
+  name: Private-inner-state -> trivial (_INNER_STATE / _GENERIC_PERSON)
+  kind: regex
+  where: build_verify_input.py:129-136, 245
+  what: >-
+    A claim about an inner state (believed/felt/feared/hoped/wanted/loved...) of a generic
+    unnamed person (a/the boy/girl/man/woman/child/mother/student/couple/family) sets trivial=True.
+  why: >-
+    Daniel EpochTimes ruling (clog/140726 15:40): private inner states of unnamed individuals in
+    human-interest stories are unverifiable. The LLM controversial/trivial flag flips run-to-run;
+    this code rule does not. Code assists SET flags (not opaquely flip cw).
+  params: >-
+    _INNER_STATE = believed?|believes|felt|feels|feared?|fears|hoped?|hopes|thought|thinks|
+    wanted?|wants|dreamed|loves?|loved; _GENERIC_PERSON = (a|an|the) [Nyr-old] (boy|girl|man|...)
+  failure_modes: >-
+    Only fires when trivial gates (GATE_ON_TRIVIAL is currently False) — so today it only annotates,
+    does not drop. Named individuals excluded by design.
+
+- id: flag-anon-collective
+  name: Anonymous-collective attributee -> unresolved (_COLLECTIVE / _COLLECTIVE_REV)
+  kind: regex
+  where: build_verify_input.py:106-113, 139-149, 246
+  what: >-
+    An attribution whose speaker is an anonymous collective ("army vets and volunteers said",
+    "fans claim", "according to analysts") with no named speaker sets unresolved=True — no
+    specific person/org a fact-checker could ask.
+  why: >-
+    Daniel Grayzone + RedState rulings (clog/140726). LLM flag flips run-to-run; code rule is
+    stable. The claim stays in the record.
+  params: >-
+    _COLL_NOUNS = vets?|veterans|volunteers|residents|fans|supporters|users|workers|soldiers|
+    locals|critics|activists|analysts|experts|witnesses|protesters|insiders|people; forward
+    (noun ...0-30 chars... say/claim/told/allege) + reversed ("according to ... noun")
+  failure_modes: >-
+    Fixed clog/140726 13:40: _NAMED_SPEAKER matching a sentence-initial collective ("Analysts
+    said...") used to veto the flag; now a named-match that IS the collective phrase doesn't veto.
+    Fixed word list — novel collective nouns are missed.
+
+- id: speech-verb-regex
+  name: Speech-verb lexicon (_SPEECH_VERB)
+  kind: regex
+  where: build_verify_input.py:152-155
+  what: >-
+    Broad reporting-verb regex used by the amplification detector (outside-quote check) and by
+    the attribution-binding validation warning.
+  why: 'Detects whether a reporting frame exists (amplification) and whether attributions are bound.'
+  params: 'said|says|say|saying|claims?|claimed|according to|told|tells|wrote|writes|stated|urged|accused|called|announced|asked|testified|argued|warned|noted|described|reported|revealed|declared|confirmed|denied|insisted|explained'
+  failure_modes: 'A quote welded to a non-listed speech verb would be judged unbound / non-frame.'
+
+- id: flags-or-assist
+  name: Flag OR-ing (LLM flags OR code assists)
+  kind: code-guard
+  where: build_verify_input.py:243-253
+  what: >-
+    Final trivial = LLM triv OR _private_inner_state; final unresolved = LLM unres OR
+    _anonymous_collective (unless retyped, which clears unres); falsifiable = LLM fals (default True).
+  why: >-
+    Daniel v3.2 (clog/140726 38-48): code assists SET flags (transparent) rather than opaquely
+    flipping cw — the record shows exactly why a claim is gated out.
+  params: 'triv = c.triv or _private_inner_state(c); unres = c.unres or _anonymous_collective(c,typ)'
+  failure_modes: 'OR-ing can only add flags, never remove an over-fired LLM flag (except the retype->unres=False case).'
+
+- id: claim-id-scheme
+  name: claim_id numbering scheme
+  kind: data-contract
+  where: build_verify_input.py:255, 270; also load_verify_posts:201
+  what: >-
+    Kept claims get claim_id = "<post_id>:<k>" (1-based); removed-ledger claims get
+    "<post_id>:r<j>". Enables post-hoc joins from verify records back to flags/topics/NG.
+  why: 'Stable per-claim key for joining verify outputs to extraction flags (clog/140726 20:00).'
+  params: 'kept: f"{post_id}:{k}"; removed: f"{post_id}:r{j}"'
+  failure_modes: 'Duplicate claim_ids warned but not fatal (validation check line 313).'
+
+- id: extra-field-passthrough
+  name: Extra per-claim field passthrough
+  kind: data-contract
+  where: build_verify_input.py:259-262
+  what: >-
+    Any per-claim key not in the reserved set {c,t,cw,ctrl,triv,unres,fals} (e.g. topic, future
+    flags) is copied onto the output row without a schema change.
+  why: 'Forward-compatibility: new extractor flags travel to verify/analysis automatically.'
+  params: 'reserved = ("c","t","cw","ctrl","triv","unres","fals"); everything else passed through'
+  failure_modes: 'A renamed reserved field would be double-written or dropped; silent.'
+
+- id: removal-ledger-travels
+  name: Removal ledger rows in the claims parquet
+  kind: data-contract
+  where: build_verify_input.py:267-276
+  what: >-
+    Each removed claim becomes a row with type=None, checkworthy=False, removed_reason set,
+    claim_id post_id:r<j> — never verified, but countable per source (opinion rates) and auditable.
+  why: 'Daniel (clog/140726): opinion/removal rates are themselves an outlet signal (for IDEA-015 etc.).'
+  params: 'removed rows: checkworthy=False, type=None, topic=None, removed_reason=reason'
+  failure_modes: 'load_verify_posts must filter removed_reason.notna() (it does) or removed claims would reach verify.'
+
+- id: post-cols-contract
+  name: POST_COLS payload contract
+  kind: data-contract
+  where: build_verify_input.py:70-75, 264-265
+  what: >-
+    A fixed ordered list of post-payload columns copied onto every claim row (handle, cell,
+    domain, url, created_at, lang, is_quote, media counts/urls, engagement, followers, ng_score,
+    lean, register). Missing columns are warned and skipped, never fatal.
+  why: >-
+    Media/engagement context must travel with the claim; strata (ng_score/lean/register/cell) are
+    analysis-only and must NEVER reach a prompt (enforced in load_verify_posts).
+  params: >-
+    POST_COLS = [handle, cell, domain, url, created_at, lang, is_quote, image_urls, video_urls,
+    n_images, n_videos, like_count, retweet_count, reply_count, quote_count, view_count,
+    followers, ng_score, lean, register]
+  failure_modes: 'Older posts parquets lack e.g. followers -> warned + skipped; strata leakage would poison verdicts if a prompt read them.'
+
+- id: load-verify-posts-contract
+  name: load_verify_posts handoff contract
+  kind: data-contract
+  where: build_verify_input.py:185-203
+  what: >-
+    THE import both sides share: groups the claims parquet into post dicts {id, url, handle,
+    domain, date, text, claims:[{c,t,cw,claim_id}]} that verify_post consumes. Drops rows with a
+    removed_reason; deliberately excludes strata columns.
+  why: >-
+    Replaces the hand-assembled 2026-07-11 dev500_claims.parquet which "had no reproducible
+    provenance" (docs/system_snapshot_2026-07-13.md:189). Strata excluded so they can't reach a prompt.
+  params: 'df = df[df.removed_reason.isna()] if column present; verify_post itself filters cw==True'
+  failure_modes: 'If removed_reason column is absent (very old parquet), no filter applied — removed claims could pass.'
+
+- id: posts-manifest
+  name: Posts manifest (denominators + status)
+  kind: data-contract
+  where: build_verify_input.py:279-300
+  what: >-
+    One row per post in the locked set with n_claims, n_checkworthy, n_removed, no_claim_reason
+    and status in {verify, skip_none_checkworthy, skip_no_claims}. Per-source denominators live here.
+  why: >-
+    Daniel (docstring): keep denominators next to the claims instead of joining by convention
+    across three files.
+  params: 'status = "verify" if n_cw else ("skip_none_checkworthy" if n_c else "skip_no_claims")'
+  failure_modes: 'Denominator correctness depends on the posts parquet being the exact locked set (URL-joined).'
+
+- id: provenance-json
+  name: Provenance JSON
+  kind: data-contract
+  where: build_verify_input.py:319-333, 158-163 (_sha1)
+  what: >-
+    Writes built_at, git_rev, extract/normalize model ids (passed in), input SHA1s, output row
+    counts, posts matched/total, checkworthy count, status counts.
+  why: '"Which config built this parquet" question dies here (docstring) — fixes the un-provenanced 2026-07-11 hand-assembly.'
+  params: 'sha1 streamed 1MB chunks; git rev-parse HEAD; models default "UNRECORDED" if not passed'
+  failure_modes: 'Models default to "UNRECORDED" if the caller omits --extract-model/--normalize-model.'
+
+- id: validation-warnings
+  name: Non-fatal validation (type / unbound / dup)
+  kind: code-guard
+  where: build_verify_input.py:302-315
+  what: >-
+    Warns (never fatal) on: claims with type not in {assertion,attribution}; attribution claims
+    lacking an "X said" speech-verb binding; duplicate claim_ids.
+  why: 'Loud-but-non-blocking QA; unbound-attribution is a known extraction issue (verify judges the claim STRING).'
+  params: 'unbound = attribution rows where claim lacks _SPEECH_VERB; dup = duplicated claim_id count'
+  failure_modes: 'Warnings only — a run with unexpected types or dup ids still writes output.'
+
+- id: url-join
+  name: URL-keyed join to locked posts
+  kind: code-guard
+  where: build_verify_input.py:223, 230-235
+  what: >-
+    Normalized posts are matched to the locked posts parquet by URL; a normalized post not in the
+    locked set is warned and skipped.
+  why: 'The locked posts parquet is the denominator set; URL is the stable cross-file key.'
+  params: 'by_url = {r["url"]: r}; skip if meta is None'
+  failure_modes: 'URL mismatch (trailing slash, tracking params) would silently drop a post from the join.'
+
+# ============================================================================
+# SAMPLING — sample_survey_subsets.py + draw_dev500b.py
+# ============================================================================
+
+- id: keep-langs
+  name: Language keep-set (_KEEP_LANGS)
+  kind: constant
+  where: sample_survey_subsets.py:40
+  what: >-
+    Only posts whose X lang code is in the keep-set survive: en plus non-linguistic codes zxx
+    (no text), qme (media link), qst (short text), qam/qht (mentions/hashtags only). "und" is
+    excluded.
+  why: >-
+    Daniel 2026-07-10 (docstring): production sees short/image-only posts; gracefully emitting no
+    claim on them is measured behavior. "und" excluded because EN can't be confirmed.
+  params: '_KEEP_LANGS = frozenset({en, zxx, qme, qst, qam, qht})'
+  failure_modes: 'An English post mis-tagged "und" by X is excluded; a non-EN post tagged zxx/qme could slip in.'
+
+- id: promo-regex
+  name: Promo/housekeeping exclusion (_PROMO_RE)
+  kind: regex
+  where: sample_survey_subsets.py:42-44
+  what: 'Posts whose text matches the promo lexicon (subscribe, newsletter, giveaway, use code, % off, merch...) are excluded before drawing.'
+  why: 'Promo/housekeeping posts carry no checkable claim; remove them from the sampling frame.'
+  params: 'subscribe|sign up|signup|newsletter|sweepstakes|giveaway|promo code|discount|use code|% off|shop now|on sale|our merch|store'
+  failure_modes: 'Fixed lexicon — novel promo phrasings pass; a legit news post mentioning "discount" could be dropped.'
+
+- id: quote-exclusion
+  name: Quote-tweet exclusion
+  kind: code-guard
+  where: sample_survey_subsets.py:113-114; draw_dev500b.py:41-42
+  what: 'Posts with is_quote true are excluded — the quoted content is not in our text field, so the post is not self-contained.'
+  why: 'A quote-tweet\x27s claim often lives in the quoted post, which we did not capture (docstring).'
+  params: '~g.is_quote.astype(bool)'
+  failure_modes: 'Loses quote-tweets that add their own checkable claim in the commentary.'
+
+- id: sampler-version
+  name: SAMPLER_VERSION marker
+  kind: constant
+  where: sample_survey_subsets.py:39
+  what: 'Version string recorded in provenance; 1.1 = keep short + image-only posts (production-graceful eval).'
+  why: 'Traceability of sampler behavior changes into the provenance JSON.'
+  params: 'SAMPLER_VERSION = "1.1"'
+  failure_modes: 'Manual bump — could drift from actual behavior if not maintained.'
+
+- id: content-words
+  name: Content-word tokenizer (content_words / _STOP / _URL_RE)
+  kind: regex
+  where: sample_survey_subsets.py:45-53
+  what: >-
+    Lowercases, strips URLs, tokenizes [a-z0-9\x27]+, drops a fixed stopword set and tokens
+    len<=2. Feeds the same-story dedupe Jaccard.
+  why: 'Content-word overlap is the same-story signal; stopwords/URLs would inflate spurious overlap.'
+  params: '_URL_RE = https?://\S+; _WORD_RE = [a-z0-9\x27]+; _STOP = ~40 function words; keep len>2'
+  failure_modes: 'Fixed stoplist is English-only; paraphrased same-story pairs with low word overlap escape.'
+
+- id: dedupe-same-story
+  name: Same-story dedupe (Jaccard >= threshold, keep earliest)
+  kind: code-guard
+  where: sample_survey_subsets.py:55-75
+  what: >-
+    Greedy O(n^2) per-source clustering: two posts are the same story if content-word Jaccard
+    >= threshold; keeps the EARLIEST post per cluster.
+  why: 'Outlets re-post the same headline all day; dedupe prevents that story dominating the sample (docstring).'
+  params: '--dupe-threshold default 0.6; inter/(union) >= threshold; sort by created_at, keep first'
+  failure_modes: >-
+    Catches the dominant re-post case; paraphrased same-story pairs only partially caught (audit
+    measures residue). Threshold 0.6 is a tuned guess.
+
+- id: systematic-draw
+  name: Time-stratified systematic draw
+  kind: code-guard
+  where: sample_survey_subsets.py:78-91
+  what: >-
+    Sorts survivors by created_at, samples every ~k-th with a seeded random start for even
+    coverage of the source\x27s whole window; tops up from unused positions if set-rounding
+    collapsed indices. Returns all if <= n.
+  why: 'Even temporal coverage of each source\x27s harvest window; avoids clustering the draw in time.'
+  params: 'step = len(g)/n; start = rng.random()*step; idx = {int(start + k*step)}; top-up from pool'
+  failure_modes: 'Sources with fewer usable posts than the quota return all (flagged "short"); rounding top-up can perturb strict every-k spacing.'
+
+- id: eval-dev-disjoint
+  name: Eval-first, dev-from-remainder disjointness
+  kind: code-guard
+  where: sample_survey_subsets.py:117-119, 129-130
+  what: >-
+    Per source, eval (100) is drawn first, then dev (10) from the remainder by the same method;
+    asserts no dev/eval post_id overlap and both are unique.
+  why: 'Disjoint train/test-style splits by construction (docstring); short sources fill eval first.'
+  params: 'ev = draw(g,100); rest = g\\ev; dv = draw(rest,10); assert not set(ev)&set(dv)'
+  failure_modes: 'A short source starves dev after filling eval (flagged); assertion halts the run on any overlap.'
+
+- id: seed-provenance
+  name: Seeded RNG + sampling provenance
+  kind: config
+  where: sample_survey_subsets.py:97-103, 134-140
+  what: >-
+    Seeded random.Random (default 20260710) drives the systematic-draw start; provenance JSON
+    records sampler version, seed, thresholds, source-parquet sha256[:16], per-source funnel, row counts.
+  why: 'Reproducible locked draws with a hashed source parquet (docstring).'
+  params: '--seed default 20260710; src_hash = sha256(TWEETS)[:16]'
+  failure_modes: 'Reproducibility depends on the source parquet being byte-identical (hash recorded to detect drift).'
+
+- id: roster-merge
+  name: Roster strata merge
+  kind: data-contract
+  where: sample_survey_subsets.py:107-108, 127-128
+  what: 'Merges per-domain roster metadata (ng_score, lean, register, followers) onto the drawn posts by domain.'
+  why: 'Strata for post-hoc analysis (per-NG-band, per-lean); these columns are analysis-only, never prompt inputs.'
+  params: 'meta_cols = roster[[domain, ng_score, lean, register, followers]]; merge on domain how=left'
+  failure_modes: 'A domain missing from the roster gets NaN strata (left join); no hard failure.'
+
+- id: dev500b-disjoint
+  name: dev-500-B disjoint draw (generalization set)
+  kind: code-guard
+  where: draw_dev500b.py:34-52
+  what: >-
+    Draws 10 posts/source disjoint from BOTH survey_dev_500 (dev500a) and survey_eval_5k, reusing
+    the same eligibility filters (langs/quote/promo/dedupe/systematic-draw); asserts zero overlap
+    and post_id uniqueness.
+  why: >-
+    Daniel 2026-07-16 (docstring): overfitting/generalization test — the chain was iterated on
+    dev-500a; B is run and audited with NO changes.
+  params: '--seed default 20260716; taken = dev500a post_ids | eval5k post_ids; assert not set(dv)&taken'
+  failure_modes: 'Depends on the same outlet_tweets.parquet; if a source has too few disjoint posts it under-fills (funnel shows drawn<10).'
+
+- id: dev500b-lock
+  name: Locked read-only output (chmod 0444)
+  kind: code-guard
+  where: draw_dev500b.py:52-54; (siblings locked likewise)
+  what: 'The drawn subset parquet is chmod 0o444 (read-only) after writing, like its dev/eval siblings.'
+  why: 'A locked evaluation set must not be silently mutated after the draw (reproducible measurement).'
+  params: 'out.chmod(0o444)'
+  failure_modes: 'A re-run must delete the read-only file first; the lock is advisory (owner can override).'
+
+# ============================================================================
+# USAGE / TELEMETRY (shared)
+# ============================================================================
+
+- id: usage-cost-accounting
+  name: Token/cost accumulation + corpus extrapolation
+  kind: code-guard
+  where: extract_tweet_claims.py:22, 90-92, 308-311; normalize_tweet_claims.py:20, 82-84, 170-172
+  what: >-
+    Both passes accumulate prompt/completion tokens and DeepInfra estimated_cost across calls and
+    print a full-corpus cost extrapolation (x = 20800 / n_processed).
+  why: 'High-visibility runs (project memory feedback_high_visibility_runs): never be in the dark on cost/throughput.'
+  params: 'USAGE = {in, out, cost}; x = 20800 / max(1, n) (20800 = full corpus size proxy)'
+  failure_modes: 'estimated_cost may be None (defaults 0); the 20800 corpus constant is hardcoded, not derived from the input.'

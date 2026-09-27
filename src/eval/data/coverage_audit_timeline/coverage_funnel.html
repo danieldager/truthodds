@@ -1,0 +1,229 @@
+<title>Pre-Scorer Coverage</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400&family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Serif:wght@600&display=swap">
+<style>
+:root{
+  --ground:#fbfaf8; --panel:#fff; --ink:#16161a; --mut:#6f6f79; --line:#e4e2dd;
+  --keep:#23232a; --lost:#d6d3cc; --flag:#8c3a34; --flagbg:#8c3a341a;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){
+  --ground:#131315; --panel:#191920; --ink:#eceae6; --mut:#97959e; --line:#2c2c33;
+  --keep:#eceae6; --lost:#3a3a42; --flag:#d98a80; --flagbg:#d98a8018;
+}}
+:root[data-theme=dark]{
+  --ground:#131315; --panel:#191920; --ink:#eceae6; --mut:#97959e; --line:#2c2c33;
+  --keep:#eceae6; --lost:#3a3a42; --flag:#d98a80; --flagbg:#d98a8018;
+}
+*{box-sizing:border-box}
+body{
+  margin:0; padding:4rem 1.5rem 7rem; background:var(--ground); color:var(--ink);
+  font-family:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,sans-serif;
+  font-size:15.5px; line-height:1.65; -webkit-font-smoothing:antialiased;
+}
+main{max-width:64rem; margin:0 auto}
+h1{font-family:"IBM Plex Serif",Georgia,serif; font-weight:600; font-size:2.1rem;
+  letter-spacing:-.015em; margin:0 0 .4rem; text-wrap:balance}
+h2{font-family:"IBM Plex Serif",Georgia,serif; font-weight:600; font-size:1.15rem;
+  margin:3.4rem 0 .2rem; text-wrap:balance}
+.eyebrow{font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:.72rem;
+  letter-spacing:.14em; text-transform:uppercase; color:var(--mut); margin:0 0 .5rem}
+.deck{color:var(--mut); margin:0 0 3rem; max-width:47rem}
+p{margin:.9rem 0}
+.note{color:var(--mut); font-size:.93rem; max-width:53rem}
+code{font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:.86em;
+  background:var(--panel); border:1px solid var(--line); border-radius:3px; padding:.05em .35em}
+.figure{border-top:2px solid var(--ink); border-bottom:1px solid var(--line);
+  padding:1.4rem 0 1.6rem; display:grid; grid-template-columns:auto 1fr; gap:0 2.4rem;
+  align-items:center}
+.figure .big{font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:4rem;
+  font-weight:300; letter-spacing:-.04em; line-height:1}
+.figure .cap b{display:block; font-weight:600; margin-bottom:.15rem}
+.funnel{display:flex; flex-direction:column; gap:.15rem; margin:1.3rem 0 .4rem}
+.row{display:grid; grid-template-columns:19rem 1fr 4.5rem 4rem 6.5rem; gap:.9rem;
+  align-items:center; padding:.3rem 0}
+.track{height:1.15rem; display:flex; border-radius:2px; overflow:hidden; background:var(--lost)}
+.seg{height:100%; background:var(--keep)}
+.n,.pct,.ci{font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-variant-numeric:tabular-nums; text-align:right}
+.n{font-size:.9rem}
+.pct{font-weight:600; font-size:.95rem}
+.ci{color:var(--mut); font-size:.78rem}
+.wrap{overflow-x:auto; margin:1rem 0 0}
+table{border-collapse:collapse; width:100%; font-size:.94rem}
+th,td{text-align:left; padding:.5rem .7rem; border-bottom:1px solid var(--line)}
+th{font-family:"IBM Plex Mono",ui-monospace,monospace; font-weight:400; font-size:.7rem;
+  letter-spacing:.1em; text-transform:uppercase; color:var(--mut);
+  border-bottom:1px solid var(--ink)}
+td.n,th.n{text-align:right; font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-variant-numeric:tabular-nums}
+td.sub{color:var(--mut); font-size:.88rem}
+tr.total td{border-top:1px solid var(--ink); border-bottom:0; font-weight:600}
+tr.miss td:first-child{box-shadow:inset 3px 0 0 var(--flag)}
+tr.miss{background:var(--flagbg)}
+td.minibar{width:30%}
+td.minibar span{display:block; height:.6rem; background:var(--keep); border-radius:1px}
+.tag{font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:.68rem;
+  letter-spacing:.08em; text-transform:uppercase; color:var(--mut)}
+.tag.f{color:var(--flag)}
+@media (max-width:760px){
+  .row{grid-template-columns:1fr 4.5rem 4rem}
+  .track,.ci{display:none}
+  .figure{grid-template-columns:1fr; gap:.6rem}
+  .figure .big{font-size:3.2rem}
+}
+</style>
+<main>
+<p class="eyebrow">Measurement &middot; 28 August 2026 &middot; timeline pool</p>
+<h1>What never reaches the scorer</h1>
+<p class="deck">Every recall number we publish is computed over claims that survived to
+scoring, so a claim we never extracted is a miss the evaluation cannot see. This measures
+that hole against a post-level denominator on the population we deploy on: 4,078 posts an
+account's For You feed actually served.</p>
+
+<div class="figure">
+  <div class="big">16.7%</div>
+  <div class="cap"><b>of served posts reach the scorer at all</b>
+  <span class="note">Everything we report about performance is conditioned on this slice.
+  The blind audit below estimates that a further 12.4% carried a checkable,
+  in-scope claim and were dropped anyway &mdash; a hole roughly three quarters the size of
+  what we currently capture.</span></div>
+</div>
+
+<h2>Post-level funnel</h2>
+<p class="note">Filled bar is what survives. Wilson intervals, 95%.</p>
+<div class="funnel">
+<div class="row"><div>posts served by the feed</div><div class="track"><div class="seg" style="width:100.00%"></div></div><div class="n">4,078</div><div class="pct">100.0%</div><div class="ci">99.9&ndash;100.0</div></div>
+<div class="row"><div>passed en/fr + length prefilter</div><div class="track"><div class="seg" style="width:81.27%"></div></div><div class="n">3,314</div><div class="pct">81.3%</div><div class="ci">80.0&ndash;82.4</div></div>
+<div class="row"><div>passed STRICT qualify screen</div><div class="track"><div class="seg" style="width:20.89%"></div></div><div class="n">852</div><div class="pct">20.9%</div><div class="ci">19.7&ndash;22.2</div></div>
+<div class="row"><div>yielded &ge;1 claim</div><div class="track"><div class="seg" style="width:19.72%"></div></div><div class="n">804</div><div class="pct">19.7%</div><div class="ci">18.5&ndash;21.0</div></div>
+<div class="row"><div>&ge;1 checkworthy claim</div><div class="track"><div class="seg" style="width:17.39%"></div></div><div class="n">709</div><div class="pct">17.4%</div><div class="ci">16.3&ndash;18.6</div></div>
+<div class="row"><div>reaches verify</div><div class="track"><div class="seg" style="width:16.67%"></div></div><div class="n">680</div><div class="pct">16.7%</div><div class="ci">15.6&ndash;17.9</div></div>
+</div>
+<p class="note">The scope gate is the whole story. It removes 2,462 posts, 60.4% of
+everything served; every stage after it is small by comparison &mdash; extraction emits
+nothing on 48 posts and the eligibility gate takes 124. That is the opposite of the noted-post
+pool, where extraction was the dominant loss, and the reason is simply that only screened-in
+posts ever reach extraction here.</p>
+
+<h2>Blind audit &mdash; how many drops are wrong?</h2>
+<p class="note">The auditor sees the post text and nothing else: not our extraction, not
+which stratum the post came from. It answers two <em>independent</em> questions &mdash; is
+there a checkable factual claim, and does the post bear on public affairs or something with
+real stakes. Both are needed, because the STRICT screen is a scope gate, not a claim-existence
+gate: &ldquo;I paid $14 for a sandwich&rdquo; is perfectly checkable and correctly dropped. A
+drop counts as wrong only when a post has a claim <em>and</em> is in scope. For posts that
+reached verify, wrong means we extracted something other than what a blind reader saw.</p>
+<div class="wrap"><table>
+<tr><th>stratum</th><th class=n>posts</th><th class=n>audited</th><th class=n>has claim</th>
+    <th class=n>+ in scope</th><th class=n>95% CI</th><th class=n>est. misses</th></tr>
+<tr><td>dropped before screening</td><td class=n>764</td><td class=n>350</td><td class=n>20.6%</td><td class=n><b>18.6%</b></td><td class=n>14.8&ndash;23.0</td><td class=n>142</td></tr><tr><td>failed the STRICT qualify screen</td><td class=n>2,462</td><td class=n>350</td><td class=n>17.4%</td><td class=n><b>10.6%</b></td><td class=n>7.8&ndash;14.2</td><td class=n>260</td></tr><tr><td>qualified, extraction emitted nothing</td><td class=n>48</td><td class=n>48</td><td class=n>25.0%</td><td class=n><b>25.0%</b></td><td class=n>14.9&ndash;38.8</td><td class=n>12</td></tr><tr><td>claims, none verify-eligible</td><td class=n>124</td><td class=n>124</td><td class=n>50.0%</td><td class=n><b>46.8%</b></td><td class=n>38.2&ndash;55.5</td><td class=n>58</td></tr><tr><td>reached verify &mdash; wrong-claim case</td><td class=n>680</td><td class=n>350</td><td class=n>88.0%</td><td class=n><b>5.1%</b></td><td class=n>3.3&ndash;8.0</td><td class=n>35</td></tr>
+<tr class="total"><td>total</td><td class=n>4,078</td><td class=n>1,222</td>
+    <td class=n></td><td class=n></td><td class=n></td><td class=n>507</td></tr>
+</table></div>
+
+<h2>Which stage dropped it</h2>
+<div class="wrap"><table>
+<tr><th>stage</th><th></th><th class=n>posts</th><th class=n>of served</th><th></th></tr>
+<tr class=""><td>language scope</td><td class=sub>non-en/fr &mdash; 94% Spanish</td><td class=n>142</td><td class=n>3.5%</td><td class="tag ">deliberate</td></tr>
+<tr class="miss"><td>STRICT qualify screen was wrong</td><td class=sub>in-scope claim, rejected anyway</td><td class=n>260</td><td class=n>6.4%</td><td class="tag f">defect</td></tr>
+<tr class=""><td>topic exclusion</td><td class=sub>entertainment, sports, lifestyle</td><td class=n>58</td><td class=n>1.4%</td><td class="tag ">deliberate</td></tr>
+<tr class="miss"><td>extracted the wrong claim</td><td class=sub>claims emitted, not the one a reader sees</td><td class=n>35</td><td class=n>0.9%</td><td class="tag f">defect</td></tr>
+<tr class="miss"><td>extraction emitted nothing</td><td class=sub>no claim at all</td><td class=n>12</td><td class=n>0.3%</td><td class="tag f">defect</td></tr>
+<tr class="total"><td>hole excluding deliberate scope policy</td>
+    <td class=sub>what is arguably broken</td>
+    <td class=n>307</td><td class=n>7.5%</td><td></td></tr>
+<tr><td>hole from extraction alone</td><td class=sub>nothing, or the wrong thing, emitted</td>
+    <td class=n>47</td><td class=n>1.2%</td><td></td></tr>
+</table></div>
+<p class="note">The prefilter's misses are almost entirely non-English &mdash; 94% Spanish in
+the sample, zero among the en/fr posts it dropped &mdash; so that bucket is the language
+scope working as designed, not a defect. Excluding both deliberate scopes, the arguable hole
+is 7.5%, and it sits overwhelmingly in one place: the qualify screen.</p>
+
+<h2>Is the qualify screen wrong, and how often?</h2>
+<p class="note">The gate's own job, scored on the 350 rejected posts audited. Its error
+rate is the one row where a claim exists and the post is in scope.</p>
+<div class="wrap"><table>
+<tr><th>blind verdict</th><th></th><th class=n>n</th><th class=n>share</th><th></th></tr>
+<tr class=""><td>no claim</td><td>out of scope</td><td class=n>267</td><td class=n>76.3%</td><td class=sub>correct rejection</td></tr>
+<tr class="miss"><td>has a claim</td><td>in scope</td><td class=n>37</td><td class=n>10.6%</td><td class=sub>the gate was wrong</td></tr>
+<tr class=""><td>has a claim</td><td>out of scope</td><td class=n>24</td><td class=n>6.9%</td><td class=sub>correct rejection</td></tr>
+<tr class=""><td>no claim</td><td>in scope</td><td class=n>22</td><td class=n>6.3%</td><td class=sub>correct rejection</td></tr>
+</table></div>
+<p class="note">So the screen gets 89.4% of its rejections right. The 10.6% it gets wrong is
+still the largest single bucket of loss in the pipeline, purely because it operates on so
+many posts. What it rejects, by its own category:</p>
+<div class="wrap"><table>
+<tr><th>screen category</th><th class=n>posts</th><th class=n>share of rejects</th></tr>
+<tr><td>promo_ad</td><td class=n>929</td><td class=n>37.7%</td></tr>
+<tr><td>anecdote</td><td class=n>293</td><td class=n>11.9%</td></tr>
+<tr><td>rhetoric</td><td class=n>289</td><td class=n>11.7%</td></tr>
+<tr><td>personal</td><td class=n>284</td><td class=n>11.5%</td></tr>
+<tr><td>bare_link</td><td class=n>237</td><td class=n>9.6%</td></tr>
+<tr><td>joke_meme</td><td class=n>175</td><td class=n>7.1%</td></tr>
+<tr><td>other</td><td class=n>89</td><td class=n>3.6%</td></tr>
+<tr><td>mockery</td><td class=n>77</td><td class=n>3.1%</td></tr>
+<tr><td>question</td><td class=n>76</td><td class=n>3.1%</td></tr>
+</table></div>
+
+<h2>Misses by post type</h2>
+<p class="note">Blind classification, weighted back to population &mdash; strata were sampled
+at different rates.</p>
+<div class="wrap"><table>
+<tr><th>post kind</th><th class=n>posts</th><th class=n>share</th><th style="width:30%"></th></tr>
+<tr><td>factual_report</td><td class=n>442</td><td class=n>87.2%</td><td class="minibar"><span style="width:87.2%"></span></td></tr>
+<tr><td>attribution</td><td class=n>42</td><td class=n>8.2%</td><td class="minibar"><span style="width:8.2%"></span></td></tr>
+<tr><td>opinion</td><td class=n>12</td><td class=n>2.4%</td><td class="minibar"><span style="width:2.4%"></span></td></tr>
+<tr><td>promo</td><td class=n>7</td><td class=n>1.4%</td><td class="minibar"><span style="width:1.4%"></span></td></tr>
+<tr><td>other</td><td class=n>3</td><td class=n>0.6%</td><td class="minibar"><span style="width:0.6%"></span></td></tr>
+<tr><td>joke_satire</td><td class=n>1</td><td class=n>0.2%</td><td class="minibar"><span style="width:0.2%"></span></td></tr>
+</table></div>
+
+<h2>Where the claim lives</h2>
+<div class="wrap"><table>
+<tr><th>locus</th><th class=n>posts</th><th class=n>share</th><th style="width:30%"></th></tr>
+<tr><td>text</td><td class=n>505</td><td class=n>99.6%</td><td class="minibar"><span style="width:99.6%"></span></td></tr>
+<tr><td>linked_article</td><td class=n>2</td><td class=n>0.4%</td><td class="minibar"><span style="width:0.4%"></span></td></tr>
+</table></div>
+<p class="note">Media-locus posts and quote attributions were the expected culprits and are
+not: the claim sits in the post text in 99.6% of misses, and attributions are 8.2% of them.
+Caveat &mdash; the auditor reads text only, so it could flag a media locus only when the text
+pointed at one.</p>
+
+<h2>Extraction itself is not the problem</h2>
+<p class="note">Of the 350 audited posts that reached verify, 308 carried an in-scope
+checkable claim by blind reading, and we recovered 290 of them &mdash; <b>94.2%</b>. Once a
+post is in scope, the chain gets the right claim out of it nearly always. The loss is
+concentrated in deciding which posts to look at, not in reading them.</p>
+
+<h2>Comparison &mdash; the community-noted pool</h2>
+<p class="note">The same instrument on 10,500 noted posts from the L3 acquitted set, where
+a human guarantees a contestable claim exists. That pool has no qualify screen, so it isolates
+what extraction and the eligibility gate do on their own.</p>
+<div class="wrap"><table>
+<tr><th></th><th class=n>timeline</th><th class=n>community-noted</th></tr>
+<tr><td>posts in</td><td class=n>4,078</td><td class=n>10,500</td></tr>
+<tr><td>yielded &ge;1 claim</td><td class=n>19.7%</td>
+    <td class=n>61.6%</td></tr>
+<tr><td>reaches verify</td><td class=n>16.7%</td>
+    <td class=n>37.8%</td></tr>
+<tr><td>the specific noted claim recovered</td><td class=sub>no notes on a timeline</td>
+    <td class=n>25.0%</td></tr>
+<tr><td>estimated silent misses</td><td class=n>12.4%</td>
+    <td class=n>15.2%</td></tr>
+</table></div>
+<p class="note">The two pools fail differently. On the timeline the scope gate dominates and
+extraction is nearly clean. On noted posts, which have already passed a human's judgement that
+something contestable is there, extraction emits nothing for 38% of them. Neither number
+transfers to the other population.</p>
+
+<h2>What this is and is not</h2>
+<p class="note">The timeline pool has no notes, so the blind auditor <em>is</em> the ground
+truth here, in a way it is not on the noted pool where it only classifies posts a human already
+flagged. Every miss figure above therefore has one model's judgement inside it, and the
+scope question in particular is a judgement call that a human panel might draw differently.
+The pool is one account's For You feed over a handful of capture sessions, so it carries that
+feed's composition. Nothing in extraction or either gate was changed to produce these numbers
+&mdash; this is a baseline on the shipped chain, measured before any tuning.</p>
+</main>

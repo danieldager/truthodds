@@ -1,0 +1,61 @@
+[
+ {
+  "workers": 4,
+  "n": 24,
+  "ok": 24,
+  "errs": {},
+  "wall": 149.9,
+  "p50": 19.7,
+  "p95": 34.1,
+  "throughput_cps": 0.16,
+  "tok_p50": 160
+ },
+ {
+  "workers": 12,
+  "n": 24,
+  "ok": 24,
+  "errs": {},
+  "wall": 42.3,
+  "p50": 18.9,
+  "p95": 20.9,
+  "throughput_cps": 0.57,
+  "tok_p50": 160
+ },
+ {
+  "workers": 48,
+  "n": 48,
+  "ok": 48,
+  "errs": {},
+  "wall": 22.3,
+  "p50": 15.6,
+  "p95": 22.1,
+  "throughput_cps": 2.16,
+  "tok_p50": 160
+ },
+ {
+  "workers": 96,
+  "n": 96,
+  "ok": 95,
+  "errs": {
+   "TimeoutError": 1
+  },
+  "wall": 185.2,
+  "p50": 12.4,
+  "p95": 33.9,
+  "throughput_cps": 0.51,
+  "tok_p50": 160
+ },
+ {
+  "workers": 192,
+  "n": 192,
+  "ok": 190,
+  "errs": {
+   "TimeoutError": 2
+  },
+  "wall": 185.4,
+  "p50": 17.3,
+  "p95": 47.0,
+  "throughput_cps": 1.02,
+  "tok_p50": 160
+ }
+]

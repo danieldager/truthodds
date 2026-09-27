@@ -1,0 +1,61 @@
+{
+ "posts_served": 4078,
+ "passed_prefilter": 3314,
+ "passed_screen": 852,
+ "yielded_claim": 804,
+ "has_checkworthy": 709,
+ "reaches_verify": 680,
+ "ci": {
+  "posts_served": [
+   0.9990588561790347,
+   1.0
+  ],
+  "passed_prefilter": [
+   0.8003851302174295,
+   0.8243328892177196
+  ],
+  "passed_screen": [
+   0.19672497457997232,
+   0.22167479869883408
+  ],
+  "yielded_claim": [
+   0.1852318701646498,
+   0.20964910708836274
+  ],
+  "has_checkworthy": [
+   0.16253598441981115,
+   0.1857973756988177
+  ],
+  "reaches_verify": [
+   0.1556224603941675,
+   0.17850162712554424
+  ]
+ },
+ "strata": {
+  "screen_reject": 2462,
+  "reached_verify": 680,
+  "no_claims": 48,
+  "prefilter": 764,
+  "not_eligible": 124,
+  "unchained": 0
+ },
+ "screen_categories": {
+  "promo_ad": 929,
+  "anecdote": 293,
+  "rhetoric": 289,
+  "personal": 284,
+  "bare_link": 237,
+  "joke_meme": 175,
+  "other": 89,
+  "mockery": 77,
+  "question": 76,
+  "science_health": 7,
+  "sports_culture": 5,
+  "current_events": 1
+ },
+ "topic_excluded_claims": {
+  "entertainment": 48,
+  "lifestyle": 16,
+  "sports": 16
+ }
+}
